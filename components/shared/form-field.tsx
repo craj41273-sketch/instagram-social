@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 interface FormFieldProps {
   id: string;
   label: string;
-  hint?: string;
+  hint?: ReactNode;
   error?: string;
   children: ReactNode;
   className?: string;

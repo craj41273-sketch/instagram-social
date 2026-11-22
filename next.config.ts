@@ -8,6 +8,17 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
+  images: {
+    // Landing photography is referenced by stable Unsplash CDN IDs. Swap the
+    // URLs in `lib/media.ts` when owned assets are available.
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "images.unsplash.com",
+        pathname: "/**",
+      },
+    ],
+  },
 };
 
 export default nextConfig;

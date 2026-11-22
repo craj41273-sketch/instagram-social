@@ -2,13 +2,14 @@ import Image from "next/image";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
-type Ratio = "square" | "portrait" | "landscape" | "wide";
+type Ratio = "square" | "portrait" | "landscape" | "wide" | "fill";
 
 const ratioStyles: Record<Ratio, string> = {
   square: "aspect-square",
   portrait: "aspect-[4/5]",
   landscape: "aspect-[3/2]",
   wide: "aspect-[16/9]",
+  fill: "absolute inset-0 size-full",
 };
 
 interface ImageContainerProps {
@@ -17,6 +18,7 @@ interface ImageContainerProps {
   ratio?: Ratio;
   loading?: boolean;
   priority?: boolean;
+  unoptimized?: boolean;
   sizes?: string;
   className?: string;
 }
@@ -28,6 +30,7 @@ export function ImageContainer({
   ratio = "square",
   loading = false,
   priority = false,
+  unoptimized = false,
   sizes = "(max-width: 768px) 100vw, 33vw",
   className,
 }: ImageContainerProps) {
@@ -48,6 +51,7 @@ export function ImageContainer({
           fill
           sizes={sizes}
           priority={priority}
+          unoptimized={unoptimized}
           className="object-cover transition-transform duration-500 ease-soft group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
         />
       ) : (

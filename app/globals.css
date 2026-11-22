@@ -187,6 +187,18 @@
 
   /* Motion */
   --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --animate-float: luma-float 8s ease-in-out infinite;
+  --animate-float-slow: luma-float 11s ease-in-out -2s infinite;
+
+  @keyframes luma-float {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0);
+    }
+    50% {
+      transform: translate3d(0, -12px, 0);
+    }
+  }
 
   /* Wide-screen breakpoint */
   --breakpoint-3xl: 96rem;

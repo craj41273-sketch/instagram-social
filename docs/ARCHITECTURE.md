@@ -34,10 +34,15 @@ Interactive islands (like buttons or composers) will be thin client components t
 ## Directory map
 
 ```text
-app/                  Routes, layouts, loading/error/not-found boundaries
+app/(site)/           Marketing route group: landing, design system, policy pages
+app/(auth)/           Auth route group: login, signup, recovery, verification
+app/                  Root providers, global styles, loading/error/not-found
+components/landing/   Marketing navigation, hero, features, illustrative visuals
+components/auth/      Auth shell, form wrappers, fields, and client form logic
 components/ui/        shadcn/ui generated primitives — do not edit by hand
 components/layout/    Persistent shell: header, footer, page container
 components/shared/    Reusable branded/composite components
+lib/media.ts          Replaceable landing photography sources
 lib/auth/             Browser, request-scoped server, and admin Supabase clients
 lib/db/               Drizzle client (`getDb`) and schema definitions
 lib/env/              Public and server-only env schemas + getters
@@ -55,6 +60,8 @@ The UI layer is backed by a documented design system (`docs/DESIGN_SYSTEM.md`):
 - **Primitives** in `components/ui/` are either generated shadcn/ui components or thin wrappers around them (`PremiumButton`, `IconButton`, `StatusBadge`, `Spinner`, `Toast`). Generated files are not edited by hand.
 - **Composite components** in `components/shared/` combine primitives into reusable patterns: `Brand`, `ThemeToggle`, `UserPreview`, `ImageContainer`, `EmptyState`, `ErrorState`, form fields, and skeletons.
 - **Providers** are mounted once in the root layout: `ThemeProvider` (dark-first theme), `TooltipProvider`, and `ToastProvider`. They are client components that wrap server-rendered children.
+- **Route groups** keep shells separate: `(site)` supplies marketing navigation and footer, `(auth)` supplies the focused `AuthShell`. Neither group changes the public URL.
+- **Auth boundary** is intentionally frontend-only: Zod schemas in `lib/validations/auth.ts` validate locally, and `lib/auth-preview.ts` exists solely to demonstrate loading states. No network call, session, or email is produced.
 - **Showcase** at `/design-system` is a client route that exercises every primitive and state without introducing product features.
 
 ## Domain plan (not yet implemented)

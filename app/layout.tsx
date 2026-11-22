@@ -3,8 +3,6 @@ import type { ReactNode } from "react";
 import "./globals.css";
 import { Geist } from "next/font/google";
 import { Instrument_Serif } from "next/font/google";
-import { SiteHeader } from "@/components/layout/site-header";
-import { SiteFooter } from "@/components/layout/site-footer";
 import { ThemeProvider } from "@/components/shared/theme-provider";
 import { ToastProvider } from "@/components/ui/toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -48,11 +46,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
       <body className="flex min-h-svh flex-col bg-background text-foreground antialiased">
         <ThemeProvider>
           <TooltipProvider delayDuration={200}>
-            <ToastProvider>
-              <SiteHeader />
-              <main className="flex-1">{children}</main>
-              <SiteFooter />
-            </ToastProvider>
+            <ToastProvider>{children}</ToastProvider>
           </TooltipProvider>
         </ThemeProvider>
       </body>

@@ -57,6 +57,7 @@ Token `--radius` is `0.875rem`; derived utilities: `rounded-sm`, `rounded-md`, `
 ## Motion
 
 - Global easing token `--ease-soft` (`cubic-bezier(0.22, 1, 0.36, 1)`).
+- Animation tokens `--animate-float` and `--animate-float-slow` use the `luma-float` keyframe for gentle, looping image motion on the landing page.
 - 150–500 ms transitions for hover, focus, dropdowns, dialogs, toasts, and image zoom.
 - `prefers-reduced-motion: reduce` collapses animations and transitions globally.
 
@@ -73,7 +74,7 @@ Tailwind defaults (`sm`, `md`, `lg`, `xl`, `2xl`) plus custom `3xl` (`96rem`) fo
 | IconButton | `components/ui/icon-button.tsx` | Required `label`, auto tooltip, `aria-label` |
 | Input | `components/ui/input.tsx` | shadcn/ui; dark-aware focus ring |
 | Textarea | `components/ui/textarea.tsx` | shadcn/ui |
-| FormField | `components/shared/form-field.tsx` | Semantic label/hint/error wrapper |
+| FormField | `components/shared/form-field.tsx` | Semantic label/hint/error wrapper; `hint` accepts text or a React node |
 | Avatar system | `components/ui/avatar.tsx` | Image + initials fallback; used by UserPreview |
 | Badge | `components/ui/badge.tsx` | shadcn/ui base |
 | StatusBadge | `components/ui/status-badge.tsx` | `neutral`, `brand`, `success`, `warning`, `danger` |
@@ -85,11 +86,45 @@ Tailwind defaults (`sm`, `md`, `lg`, `xl`, `2xl`) plus custom `3xl` (`96rem`) fo
 | Skeleton | `components/ui/skeleton.tsx` + `components/shared/skeletons.tsx` | Lines, avatars, user previews, cards |
 | Spinner | `components/ui/spinner.tsx` | Accessible `role="status"` |
 | Toast | `components/ui/toast.tsx` | Radix provider + `useToast()` with tones |
-| ImageContainer | `components/shared/image-container.tsx` | Ratios, next/image, loading skeleton, gradient fallback |
+| ImageContainer | `components/shared/image-container.tsx` | Ratios (`square`, `portrait`, `landscape`, `wide`, `fill`), next/image, loading skeleton, gradient fallback, `unoptimized` escape hatch |
 | UserPreview | `components/shared/user-preview.tsx` | Avatar, name, handle, verified, presence |
 | EmptyState | `components/shared/empty-state.tsx` | Icon, title, description, action |
 | ErrorState | `components/shared/error-state.tsx` | `role="alert"`, title, description, action |
 | ThemeToggle | `components/shared/theme-toggle.tsx` | Toggles optional light mode; dark is default |
+
+## Landing and auth layers
+
+Route groups give each surface its own shell without changing URLs:
+
+- `app/(site)/layout.tsx` — marketing navigation + full footer for `/`, `/design-system`, and policy pages.
+- `app/(auth)/layout.tsx` — focused `AuthShell` for login, signup, and recovery pages.
+
+### Landing components
+
+| Component | File | Notes |
+| --- | --- | --- |
+| LandingNav | `components/landing/landing-nav.tsx` | Desktop links, accessible mobile disclosure, theme toggle, auth CTAs |
+| HeroComposition | `components/landing/hero-composition.tsx` | Layered photo tiles, profile chip, float motion, primary/secondary CTAs |
+| FeatureSection | `components/landing/feature-section.tsx` | Reusable alternating editorial row |
+| Feature visuals | `components/landing/feature-visuals.tsx` | Static, decorative mock previews for share/discover/community/connect |
+| SocialProof | `components/landing/social-proof.tsx` | Explicitly labelled illustrative profiles; no invented metrics |
+
+### Auth components
+
+| Component | File | Notes |
+| --- | --- | --- |
+| AuthShell | `components/auth/auth-shell.tsx` | Editorial image panel + centered form column |
+| AuthFormWrapper | `components/auth/auth-form-wrapper.tsx` | Shared card, eyebrow, title, description, footer |
+| AuthAlert | `components/auth/auth-alert.tsx` | `error`, `warning`, `success`, `info` tones with live regions |
+| AuthCheckbox | `components/auth/auth-checkbox.tsx` | Native checkbox with link-friendly label |
+| PasswordInput | `components/auth/password-input.tsx` | Labeled show/hide toggle, `aria-pressed` state |
+| PasswordStrength | `components/auth/password-strength.tsx` | Local score meter and checklist; never persisted |
+| SubmitButton | `components/auth/submit-button.tsx` | Full-width primary action with loading state |
+| AuthDivider | `components/auth/auth-divider.tsx` | Decorative separator |
+| SocialLoginButton | `components/auth/social-login-button.tsx` | Disabled Google boundary with pending-setup label |
+| Auth forms | `components/auth/forms/` | Zod-validated, frontend-only forms |
+
+All landing photography is centralized in `lib/media.ts` and currently points to stable Unsplash CDN IDs. Images are rendered unoptimized because the local arm64 runtime cannot load the native image optimizer; replace the URLs with owned assets when available.
 
 ## Usage rules
 
