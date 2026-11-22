@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 
 interface AuthCheckboxProps {
   id: string;
+  name?: string;
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
   label: ReactNode;
@@ -13,6 +14,7 @@ interface AuthCheckboxProps {
 /** Native checkbox with a semantic, link-friendly label. */
 export function AuthCheckbox({
   id,
+  name,
   checked,
   onCheckedChange,
   label,
@@ -23,6 +25,7 @@ export function AuthCheckbox({
     <div className="flex items-start gap-2.5">
       <input
         id={id}
+        name={name}
         type="checkbox"
         checked={checked}
         onChange={(event) => onCheckedChange(event.target.checked)}

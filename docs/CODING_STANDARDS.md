@@ -23,7 +23,10 @@
 - Add domain logic in application-level modules under `lib/`, not inside route handlers or components.
 - Validate all external input with a Zod schema from `lib/validations/`.
 - Never import `lib/db/index.ts`, `lib/env/server.ts`, or `lib/auth/server.ts` into client code; they use the `server-only` guard.
-- Never call `getServerEnv()` at module scope.
+- Never call `getServerEnv()` at module scope; prefer the narrower env getters.
+- Session/user reads go through `lib/auth/dal.ts`. Derive identity only from the verified Supabase session; never trust a client-supplied user ID or auth ID.
+- Server actions validate `FormData` with Zod, return serializable safe state, and never forward raw SDK/database errors to the browser.
+- `proxy.ts` is an optimistic layer only; authorization must be rechecked in actions or the DAL.
 
 ## Styling
 

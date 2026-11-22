@@ -51,7 +51,7 @@ export function HeroComposition() {
           </div>
 
           <p className="mt-6 text-xs leading-relaxed text-muted-foreground">
-            Frontend preview. Accounts, uploads, and social features arrive in
+            Accounts use Supabase Auth. Uploads and social features arrive in
             later blocks.
           </p>
         </div>

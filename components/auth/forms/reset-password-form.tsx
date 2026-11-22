@@ -1,14 +1,20 @@
 "use client";
 
 import * as React from "react";
+import { useActionState } from "react";
 import Link from "next/link";
+import { resetPasswordAction } from "@/app/actions/auth";
 import { AuthAlert } from "@/components/auth/auth-alert";
 import { PasswordInput } from "@/components/auth/password-input";
 import { PasswordStrength } from "@/components/auth/password-strength";
 import { SubmitButton } from "@/components/auth/submit-button";
 import { FormField } from "@/components/shared/form-field";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { waitForPreviewState } from "@/lib/auth-preview";
+import { createSupabaseBrowserClient } from "@/lib/auth/client";
+import {
+  initialAuthState,
+  type AuthActionState,
+} from "@/lib/auth/action-state";
 import {
   resetPasswordSchema,
   toFormErrors,
@@ -26,9 +32,21 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
     confirmPassword: "",
   });
   const [errors, setErrors] = React.useState<FormErrors<ResetPasswordValues>>({});
-  const [status, setStatus] = React.useState<"idle" | "loading" | "ready">(
-    "idle",
-  );
+  const [state, formAction, pending] = useActionState<
+    AuthActionState<ResetPasswordValues>,
+    FormData
+  >(resetPasswordAction, initialAuthState<ResetPasswordValues>());
+
+  // A Supabase recovery link puts its tokens in the URL fragment. Creating
+  // the browser client lets @supabase/ssr exchange them and write cookies
+  // before the server action reads the session.
+  React.useEffect(() => {
+    try {
+      void createSupabaseBrowserClient().auth.getSession();
+    } catch {
+      // The server action reports the configuration problem to the user.
+    }
+  }, []);
 
   function updatePassword(value: string) {
     setValues((current) => ({ ...current, password: value }));
@@ -51,9 +69,9 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
     }));
   }
 
-  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
+  function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (status === "loading") return;
+    if (pending) return;
 
     const result = resetPasswordSchema.safeParse(values);
     if (!result.success) {
@@ -65,33 +83,35 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
     }
 
     setErrors({});
-    setStatus("loading");
-    await waitForPreviewState();
-    setStatus("ready");
+    formAction(new FormData(event.currentTarget));
   }
+
+  const passwordError = errors.password ?? state.errors?.password;
+  const confirmError = errors.confirmPassword ?? state.errors?.confirmPassword;
 
   return (
     <form onSubmit={onSubmit} noValidate className="space-y-5">
+      <input type="hidden" name="token" value={token ?? ""} />
+
       {token ? (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-surface/60 p-3">
-          <StatusBadge tone="success">Token detected</StatusBadge>
+          <StatusBadge tone="success">Recovery token detected</StatusBadge>
           <p className="text-xs text-muted-foreground">
-            The token will be passed to Supabase Auth when this flow is wired up.
+            It will be exchanged securely with Supabase Auth when you continue.
           </p>
         </div>
       ) : (
-        <AuthAlert
-          tone="warning"
-          title="No reset token found"
-          description="Open this page from a reset link once email delivery is connected. The form below is available for UI preview only."
-        />
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Open this page from the recovery link in your email. Reset links from
+          Supabase include a secure one-time token.
+        </p>
       )}
 
       <FormField
         id="reset-password"
         label="New password"
         hint="At least 8 characters with a letter and a number."
-        error={errors.password}
+        error={passwordError}
       >
         <PasswordInput
           id="reset-password"
@@ -99,14 +119,14 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
           onChange={updatePassword}
           placeholder="New password"
           autoComplete="new-password"
-          invalid={Boolean(errors.password)}
+          invalid={Boolean(passwordError)}
           describedBy={
             [
-              errors.password ? "reset-password-error" : "reset-password-hint",
+              passwordError ? "reset-password-error" : "reset-password-hint",
               "reset-password-strength",
             ].join(" ")
           }
-          disabled={status === "loading"}
+          disabled={pending}
         />
         <div id="reset-password-strength">
           <PasswordStrength value={values.password} />
@@ -116,7 +136,7 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
       <FormField
         id="reset-confirm"
         label="Confirm new password"
-        error={errors.confirmPassword}
+        error={confirmError}
       >
         <PasswordInput
           id="reset-confirm"
@@ -124,25 +144,19 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
           onChange={updateConfirmPassword}
           placeholder="Repeat new password"
           autoComplete="new-password"
-          invalid={Boolean(errors.confirmPassword)}
-          describedBy={
-            errors.confirmPassword ? "reset-confirm-error" : undefined
-          }
-          disabled={status === "loading"}
+          invalid={Boolean(confirmError)}
+          describedBy={confirmError ? "reset-confirm-error" : undefined}
+          disabled={pending}
         />
       </FormField>
 
-      {status === "ready" && (
-        <AuthAlert
-          tone="info"
-          title="New password validated locally"
-          description="Nothing was changed. Supabase Auth will handle the real reset once backend integration arrives."
-        />
+      {state.status === "error" && state.message && (
+        <AuthAlert tone="error" title="Could not update password" description={state.message} />
       )}
 
       <SubmitButton
         label="Set new password"
-        loading={status === "loading"}
+        loading={pending}
         loadingLabel="Updating…"
       />
 

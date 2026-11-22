@@ -21,7 +21,7 @@ export default async function ResetPasswordPage({
     <AuthFormWrapper
       eyebrow="Account recovery"
       title="Choose a new password"
-      description="This page is ready to receive a real reset token from the future authentication backend."
+      description="Choose a new password using the link from your recovery email."
     >
       <ResetPasswordForm token={token} />
     </AuthFormWrapper>

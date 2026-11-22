@@ -74,7 +74,7 @@ export function AuthShell({ children }: { children: ReactNode }) {
         </div>
 
         <p className="px-4 pb-6 text-center text-xs text-muted-foreground sm:px-8">
-          Frontend preview · authentication is not connected yet.
+          Supabase Auth · real accounts, no simulated sign-in.
         </p>
       </div>
     </div>

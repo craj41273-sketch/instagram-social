@@ -18,6 +18,8 @@ You are working on a premium Instagram-inspired social application. Follow these
 2. Never overwrite unrelated files or existing user work outside this repository.
 3. Ask before adding a dependency that is not part of the approved stack: Next.js App Router, TypeScript, Tailwind CSS, shadcn/ui, Lucide, Neon PostgreSQL, Supabase Auth/Storage/Realtime, Drizzle ORM, Zod.
 
+Current state: Blocks 1–4 are complete. Block 5 (feed/posts) is next; do not add social features here. Backend details and credential requirements live in `docs/BACKEND.md`.
+
 ## Architecture
 
 - Server Components are the default. Add `"use client"` only for state, events, effects, or browser APIs.
@@ -25,7 +27,8 @@ You are working on a premium Instagram-inspired social application. Follow these
 - Database work goes through `getDb()` in `lib/db/index.ts`. Validate input with Zod schemas in `lib/validations/`.
 - Never import server-only modules (`lib/db/index.ts`, `lib/env/server.ts`, `lib/auth/server.ts`) from client code.
 - Never read `process.env` directly outside `lib/env/`. Never expose `DATABASE_URL` or `SUPABASE_SERVICE_ROLE_KEY` with a `NEXT_PUBLIC_` prefix.
-- Do not call `getServerEnv()` at module import time.
+- Do not call `getServerEnv()` at module import time; use the narrow getters where possible.
+- Derive identity only from the verified Supabase session through `lib/auth/dal.ts`; never trust client-supplied user IDs or auth IDs. `proxy.ts` is optimistic only — recheck authority in actions/DAL.
 - Use `@/*` imports, `cn()` for class merging, and Lucide icons. Do not hand-edit generated `components/ui/` primitives; use `npx shadcn@latest add <name>` and add app-specific variants as wrappers instead.
 - Follow `docs/DESIGN_SYSTEM.md`. Use semantic tokens (`bg-surface`, `text-muted-foreground`, `shadow-lift`, `ease-soft`) instead of raw colors or one-off styles.
 - Compose UI from the existing library in `components/ui/` and `components/shared/`; do not duplicate utility strings or build parallel component systems.

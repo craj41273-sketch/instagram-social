@@ -130,7 +130,7 @@ export function LandingNav() {
             </PremiumButton>
           </div>
           <p className="mt-4 text-xs text-muted-foreground">
-            Frontend preview · accounts are not connected yet.
+            Supabase Auth ready · social features arrive next.
           </p>
         </PageContainer>
       </div>

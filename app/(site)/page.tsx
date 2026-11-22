@@ -145,8 +145,8 @@ export default function HomePage() {
                 A better place for what you see.
               </h2>
               <p className="mx-auto mt-4 max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-                Luma is being built deliberately. This preview covers the
-                design language and authentication experience; sharing,
+                Luma is being built deliberately. This foundation covers the
+                design language, authentication, and backend; sharing,
                 discovery, and messaging follow in later blocks.
               </p>
               <div className="mt-8 flex flex-wrap justify-center gap-3">

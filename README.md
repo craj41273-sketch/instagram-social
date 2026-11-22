@@ -1,6 +1,6 @@
 # Luma
 
-Premium, dark-first photo-sharing experience built on Next.js. **Blocks 1–3 are complete: the project foundation, design system, landing page, and frontend authentication UI are in place.** All auth is a frontend preview — no accounts, sessions, email, uploads, or social features are connected yet.
+Premium, dark-first photo-sharing experience built on Next.js. **Blocks 1–4 are complete:** project foundation, design system, landing page, authentication UI, and a real backend foundation (Neon/Drizzle + Supabase Auth). Social features begin in Block 5. No uploads or social features are connected yet.
 
 ## Stack
 
@@ -51,11 +51,12 @@ Open <http://localhost:3000>. Every route — the landing page, design system, a
 | --- | --- |
 | `/` | Premium landing page with responsive navigation, hero, features, and illustrative social proof |
 | `/design-system` | Living token and component showcase |
-| `/login`, `/signup` | Frontend-only authentication forms with local validation |
-| `/forgot-password`, `/reset-password`, `/verify-email` | Recovery/verification previews; token-ready, no fake success |
+| `/login`, `/signup` | Real Supabase-backed authentication forms with shared Zod validation |
+| `/forgot-password`, `/reset-password`, `/verify-email` | Real recovery/verification flows; no simulated success |
+| `/auth/callback`, `/auth/confirm` | Supabase PKCE and OTP confirmation endpoints |
 | `/privacy`, `/terms`, `/contact` | Honest placeholder pages so footer links resolve |
 
-> **Auth limitation:** forms validate locally and show explicit "backend pending" states. No account is created, no email is sent, no session is stored, and Google sign-in is disabled until Supabase Auth is configured.
+> **Credential status:** all auth routes are implemented locally; real signup, email delivery, and Neon queries require the values in `.env.local`. Google sign-in remains disabled because it is outside this block. See [`docs/BACKEND.md`](docs/BACKEND.md).
 
 > **Platform note:** `dev` and `build` deliberately pass `--webpack`. This project was initialized on Android/arm64, where Turbopack native bindings are unavailable. On a supported machine you may remove the flag.
 
@@ -69,6 +70,7 @@ Open <http://localhost:3000>. Every route — the landing page, design system, a
 | `npm run lint` | Run ESLint |
 | `npm run typecheck` | Run `tsc --noEmit` |
 | `npm run check` | Typecheck and lint |
+| `npm test` | Backend foundation tests (Node built-in test runner) |
 | `npm run db:generate` | Generate a Drizzle migration |
 | `npm run db:migrate` | Apply generated migrations |
 | `npm run db:push` | Push schema directly (development only) |
@@ -78,29 +80,40 @@ Open <http://localhost:3000>. Every route — the landing page, design system, a
 
 Copy `.env.example` to `.env.local` and fill in real values. `.env*` files are ignored by Git; `.env.example` is committed as the documented template.
 
-- `DATABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are server-only.
+- `DATABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are server-only; never prefix them with `NEXT_PUBLIC_`.
 - Only `NEXT_PUBLIC_*` variables may be read in client code.
 - Variables are validated on demand in `lib/env/` and fail with a descriptive error when missing or malformed.
+- Public routes still render without credentials; auth/data actions fail safely with a configuration message.
+- Credential sources: Neon Console → Connection details (`DATABASE_URL`) and Supabase → Project Settings → API (URL, anon key, service role key).
 
 ## Structure
 
 ```text
 app/(site)/           Marketing shell: landing, design system, policy pages
 app/(auth)/           Focused shell: login, signup, recovery, verification
+app/actions/          Authentication server actions
+app/auth/             Supabase callback and OTP confirmation handlers
 app/                  Root providers, global styles, error/loading/not-found
+proxy.ts              Next.js 16 session refresh and auth-only redirects
 components/landing/   Nav, hero composition, feature rows, illustrative visuals
-components/auth/      Auth shell, wrappers, fields, and form logic
+components/auth/      Auth shell, wrappers, fields, and client form logic
 components/ui/        shadcn/ui primitives + app-wide wrappers
 components/layout/    Header, footer, page container, info-page template
 components/shared/    Brand, theme, states, media, identity components
-lib/auth/             Supabase browser/server/admin clients
-lib/db/               Drizzle client and schema
-lib/env/              Validated environment access
-lib/validations/      Zod schemas, including frontend auth validation
+lib/auth/             Supabase clients, DAL, identity mapping, constants
+lib/db/               Drizzle client, foundational schema, identity SQL
+lib/env/              Validated public/server-only environment access
+lib/security/         Rate-limit preparation and safe redirect helpers
+lib/storage/          Planned bucket names and storage boundary
+lib/errors.ts         Typed errors and user-safe messages
+lib/logging.ts        Redacted server diagnostics
+lib/validations/      Zod schemas shared by UI and server actions
 lib/media.ts          Centralized, replaceable landing photography
+drizzle/              Generated migrations
+tests/                Backend tests and the local TS resolve hook
 hooks/                Shared React hooks
 types/                Shared TypeScript types
-docs/                 Architecture, coding standards, design system
+docs/                 Architecture, backend, coding standards, design system
 public/               Static assets
 ```
 
@@ -115,7 +128,9 @@ public/               Static assets
 - [x] Complete reusable component library and state components
 - [x] Responsive design-system showcase at `/design-system`
 - [x] Premium landing page with responsive nav, photography hero, features, and honest illustrative content
-- [x] Frontend authentication UI with local validation and explicit backend-pending states
+- [x] Frontend authentication UI with shared validation and real action states
+- [x] Real Supabase Auth flows, session handling, and server-derived identity mapping
+- [x] Foundational Neon schema, generated migrations, and backend tests
 - [x] Typecheck, lint, build, and dev server verification
-- [ ] Real authentication, sessions, domain schema, and migrations (Block 4)
+- [ ] Remote Neon/Supabase integration verified with real credentials (deployment step)
 - [ ] Posts, feed, likes, comments, follows, stories, messaging, notifications, search, explore (later blocks)

@@ -11,15 +11,15 @@ export default function PrivacyPage() {
     <InfoPage
       eyebrow="Placeholder policy"
       title="Privacy"
-      description="Luma does not collect account data in this frontend preview. This page is a placeholder and will be replaced with a complete policy before launch."
+      description="Luma uses Supabase Auth for accounts and Neon PostgreSQL for application data. This page is a placeholder and will be replaced with a complete policy before launch."
       sections={[
         {
           heading: "Current state",
-          body: "No accounts, sessions, uploads, or analytics are active. Form data entered in this preview stays in your browser and is not transmitted.",
+          body: "Accounts and sessions are handled by Supabase Auth; application profile records are stored in Neon PostgreSQL. Uploads, analytics, and social features are not part of this preview.",
         },
         {
           heading: "Planned handling",
-          body: "Account details will be stored with Supabase Auth, and application data with Neon PostgreSQL. A full policy will describe retention, deletion, and your choices before any of these services are enabled.",
+          body: "A full policy will describe retention, deletion, and your choices before social features, uploads, or analytics are introduced.",
         },
         {
           heading: "Questions",

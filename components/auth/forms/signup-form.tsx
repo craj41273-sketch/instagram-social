@@ -1,7 +1,9 @@
 "use client";
 
 import * as React from "react";
+import { useActionState } from "react";
 import Link from "next/link";
+import { signupAction } from "@/app/actions/auth";
 import { AuthAlert } from "@/components/auth/auth-alert";
 import { AuthCheckbox } from "@/components/auth/auth-checkbox";
 import { PasswordInput } from "@/components/auth/password-input";
@@ -10,15 +12,16 @@ import { SocialLoginButton } from "@/components/auth/social-login-button";
 import { SubmitButton } from "@/components/auth/submit-button";
 import { FormField } from "@/components/shared/form-field";
 import { Input } from "@/components/ui/input";
-import { waitForPreviewState } from "@/lib/auth-preview";
+import {
+  initialAuthState,
+  type AuthActionState,
+} from "@/lib/auth/action-state";
 import {
   signupSchema,
   toFormErrors,
   type FormErrors,
   type SignupValues,
 } from "@/lib/validations/auth";
-
-type Status = "idle" | "loading" | "ready";
 
 const initialValues: SignupValues = {
   displayName: "",
@@ -32,7 +35,10 @@ const initialValues: SignupValues = {
 export function SignupForm() {
   const [values, setValues] = React.useState<SignupValues>(initialValues);
   const [errors, setErrors] = React.useState<FormErrors<SignupValues>>({});
-  const [status, setStatus] = React.useState<Status>("idle");
+  const [state, formAction, pending] = useActionState<
+    AuthActionState<SignupValues>,
+    FormData
+  >(signupAction, initialAuthState<SignupValues>());
 
   function update<K extends keyof SignupValues>(
     key: K,
@@ -63,9 +69,9 @@ export function SignupForm() {
     }));
   }
 
-  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
+  function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (status === "loading") return;
+    if (pending) return;
 
     const result = signupSchema.safeParse(values);
     if (!result.success) {
@@ -80,10 +86,15 @@ export function SignupForm() {
     }
 
     setErrors({});
-    setStatus("loading");
-    await waitForPreviewState();
-    setStatus("ready");
+    formAction(new FormData(event.currentTarget));
   }
+
+  const displayNameError = errors.displayName ?? state.errors?.displayName;
+  const usernameError = errors.username ?? state.errors?.username;
+  const emailError = errors.email ?? state.errors?.email;
+  const passwordError = errors.password ?? state.errors?.password;
+  const confirmError = errors.confirmPassword ?? state.errors?.confirmPassword;
+  const termsError = errors.terms ?? state.errors?.terms;
 
   return (
     <form onSubmit={onSubmit} noValidate className="space-y-5">
@@ -91,7 +102,7 @@ export function SignupForm() {
         id="displayName"
         label="Display name"
         hint="This is how your name appears on your profile."
-        error={errors.displayName}
+        error={displayNameError}
       >
         <Input
           id="displayName"
@@ -100,12 +111,12 @@ export function SignupForm() {
           placeholder="Your name"
           value={values.displayName}
           onChange={(event) => update("displayName", event.target.value)}
-          aria-invalid={Boolean(errors.displayName) || undefined}
+          aria-invalid={Boolean(displayNameError) || undefined}
           aria-describedby={
-            errors.displayName ? "displayName-error" : "displayName-hint"
+            displayNameError ? "displayName-error" : "displayName-hint"
           }
           className="h-11"
-          disabled={status === "loading"}
+          disabled={pending}
         />
       </FormField>
 
@@ -113,7 +124,7 @@ export function SignupForm() {
         id="username"
         label="Username"
         hint="3–20 characters: lowercase letters, numbers, dots, or underscores."
-        error={errors.username}
+        error={usernameError}
       >
         <Input
           id="username"
@@ -122,10 +133,10 @@ export function SignupForm() {
           placeholder="your.handle"
           value={values.username}
           onChange={(event) => update("username", event.target.value)}
-          aria-invalid={Boolean(errors.username) || undefined}
-          aria-describedby={errors.username ? "username-error" : "username-hint"}
+          aria-invalid={Boolean(usernameError) || undefined}
+          aria-describedby={usernameError ? "username-error" : "username-hint"}
           className="h-11"
-          disabled={status === "loading"}
+          disabled={pending}
         />
       </FormField>
 
@@ -133,7 +144,7 @@ export function SignupForm() {
         id="signup-email"
         label="Email"
         hint="Use an address you can access later."
-        error={errors.email}
+        error={emailError}
       >
         <Input
           id="signup-email"
@@ -143,10 +154,10 @@ export function SignupForm() {
           placeholder="you@example.com"
           value={values.email}
           onChange={(event) => update("email", event.target.value)}
-          aria-invalid={Boolean(errors.email) || undefined}
-          aria-describedby={errors.email ? "signup-email-error" : "signup-email-hint"}
+          aria-invalid={Boolean(emailError) || undefined}
+          aria-describedby={emailError ? "signup-email-error" : "signup-email-hint"}
           className="h-11"
-          disabled={status === "loading"}
+          disabled={pending}
         />
       </FormField>
 
@@ -154,7 +165,7 @@ export function SignupForm() {
         id="signup-password"
         label="Password"
         hint="At least 8 characters with a letter and a number."
-        error={errors.password}
+        error={passwordError}
       >
         <PasswordInput
           id="signup-password"
@@ -162,14 +173,14 @@ export function SignupForm() {
           onChange={updatePassword}
           placeholder="Create a password"
           autoComplete="new-password"
-          invalid={Boolean(errors.password)}
+          invalid={Boolean(passwordError)}
           describedBy={
             [
-              errors.password ? "signup-password-error" : "signup-password-hint",
+              passwordError ? "signup-password-error" : "signup-password-hint",
               "signup-password-strength",
             ].join(" ")
           }
-          disabled={status === "loading"}
+          disabled={pending}
         />
         <div id="signup-password-strength">
           <PasswordStrength value={values.password} />
@@ -179,7 +190,7 @@ export function SignupForm() {
       <FormField
         id="confirmPassword"
         label="Confirm password"
-        error={errors.confirmPassword}
+        error={confirmError}
       >
         <PasswordInput
           id="confirmPassword"
@@ -187,21 +198,20 @@ export function SignupForm() {
           onChange={updateConfirmPassword}
           placeholder="Repeat your password"
           autoComplete="new-password"
-          invalid={Boolean(errors.confirmPassword)}
-          describedBy={
-            errors.confirmPassword ? "confirmPassword-error" : undefined
-          }
-          disabled={status === "loading"}
+          invalid={Boolean(confirmError)}
+          describedBy={confirmError ? "confirmPassword-error" : undefined}
+          disabled={pending}
         />
       </FormField>
 
       <div>
         <AuthCheckbox
           id="terms"
+          name="terms"
           checked={values.terms}
           onCheckedChange={(checked) => update("terms", checked)}
-          invalid={Boolean(errors.terms)}
-          describedBy={errors.terms ? "terms-error" : undefined}
+          invalid={Boolean(termsError)}
+          describedBy={termsError ? "terms-error" : undefined}
           label={
             <>
               I agree to the{" "}
@@ -210,25 +220,35 @@ export function SignupForm() {
             </>
           }
         />
-        {errors.terms && (
+        {termsError && (
           <p id="terms-error" role="alert" className="mt-2 text-xs text-destructive">
-            {errors.terms}
+            {termsError}
           </p>
         )}
       </div>
 
-      {status === "ready" && (
+      {state.status === "verification" && state.message && (
         <AuthAlert
-          tone="info"
-          title="Details validated locally"
-          description="No account was created. Registration will call Supabase Auth once the backend block is implemented."
+          tone="success"
+          title="Check your inbox"
+          description={state.message}
         />
+      )}
+      {state.status === "needs-retry" && state.message && (
+        <AuthAlert
+          tone="warning"
+          title="Profile setup incomplete"
+          description={state.message}
+        />
+      )}
+      {state.status === "error" && state.message && (
+        <AuthAlert tone="error" title="Could not create account" description={state.message} />
       )}
 
       <SubmitButton
         label="Create account"
-        loading={status === "loading"}
-        loadingLabel="Checking your details…"
+        loading={pending}
+        loadingLabel="Creating your account…"
       />
 
       <p className="text-center text-xs text-muted-foreground">

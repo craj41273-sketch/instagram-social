@@ -9,9 +9,11 @@ export const displayNameSchema = z
   .min(2, "Display name must be at least 2 characters.")
   .max(50, "Display name must be 50 characters or fewer.");
 
+/** Normalizes first so uppercase input is accepted but always stored lowercase. */
 export const usernameSchema = z
   .string()
   .trim()
+  .toLowerCase()
   .min(3, "Username must be at least 3 characters.")
   .max(20, "Username must be 20 characters or fewer.")
   .regex(
@@ -66,10 +68,25 @@ export const resetPasswordSchema = z
     message: "Passwords do not match.",
   });
 
+export const usernameLookupSchema = z.object({
+  username: usernameSchema,
+});
+
+/** Token may arrive from a Supabase recovery link (PKCE code or OTP hash). */
+export const resetPasswordActionSchema = resetPasswordSchema.extend({
+  token: z.string().max(512).optional(),
+});
+
+export const verifyEmailSchema = z.object({
+  token: z.string().max(512).optional(),
+  email: emailSchema.optional(),
+});
+
 export type SignupValues = z.infer<typeof signupSchema>;
 export type LoginValues = z.infer<typeof loginSchema>;
 export type ForgotPasswordValues = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordValues = z.infer<typeof resetPasswordSchema>;
+export type ResetPasswordActionValues = z.infer<typeof resetPasswordActionSchema>;
 
 export type FormErrors<T> = Partial<Record<keyof T, string>>;
 

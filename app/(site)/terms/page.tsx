@@ -11,11 +11,11 @@ export default function TermsPage() {
     <InfoPage
       eyebrow="Placeholder policy"
       title="Terms of service"
-      description="Luma is currently a frontend preview. These terms are a placeholder and will be replaced with complete terms before launch."
+      description="Luma is an early preview. These terms are a placeholder and will be replaced with complete terms before launch."
       sections={[
         {
-          heading: "Preview only",
-          body: "Registration, sign-in, uploads, and social features are not connected. Nothing you enter creates an account or publishes content.",
+          heading: "Current preview",
+          body: "Registration and sign-in use Supabase Auth. Uploads and social features are not part of this preview; nothing you enter publishes content.",
         },
         {
           heading: "Future terms",
@@ -23,7 +23,7 @@ export default function TermsPage() {
         },
         {
           heading: "Changes",
-          body: "This page will be updated as the product moves beyond the frontend blocks.",
+          body: "This page will be updated as the product adds social features.",
         },
       ]}
     />

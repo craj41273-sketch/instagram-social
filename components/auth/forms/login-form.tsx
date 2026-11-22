@@ -1,7 +1,9 @@
 "use client";
 
 import * as React from "react";
+import { useActionState } from "react";
 import Link from "next/link";
+import { loginAction } from "@/app/actions/auth";
 import { AuthAlert } from "@/components/auth/auth-alert";
 import { AuthCheckbox } from "@/components/auth/auth-checkbox";
 import { PasswordInput } from "@/components/auth/password-input";
@@ -9,7 +11,10 @@ import { SocialLoginButton } from "@/components/auth/social-login-button";
 import { SubmitButton } from "@/components/auth/submit-button";
 import { FormField } from "@/components/shared/form-field";
 import { Input } from "@/components/ui/input";
-import { waitForPreviewState } from "@/lib/auth-preview";
+import {
+  initialAuthState,
+  type AuthActionState,
+} from "@/lib/auth/action-state";
 import {
   loginSchema,
   toFormErrors,
@@ -17,25 +22,30 @@ import {
   type LoginValues,
 } from "@/lib/validations/auth";
 
-type Status = "idle" | "loading" | "ready";
+interface LoginFormProps {
+  notice?: "reset" | "setup" | null;
+}
 
-export function LoginForm() {
+export function LoginForm({ notice }: LoginFormProps) {
   const [values, setValues] = React.useState<LoginValues>({
     email: "",
     password: "",
     remember: false,
   });
   const [errors, setErrors] = React.useState<FormErrors<LoginValues>>({});
-  const [status, setStatus] = React.useState<Status>("idle");
+  const [state, formAction, pending] = useActionState<
+    AuthActionState<LoginValues>,
+    FormData
+  >(loginAction, initialAuthState<LoginValues>());
 
   function update<K extends keyof LoginValues>(key: K, value: LoginValues[K]) {
     setValues((current) => ({ ...current, [key]: value }));
     setErrors((current) => ({ ...current, [key]: undefined }));
   }
 
-  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
+  function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (status === "loading") return;
+    if (pending) return;
 
     const result = loginSchema.safeParse(values);
     if (!result.success) {
@@ -47,14 +57,30 @@ export function LoginForm() {
     }
 
     setErrors({});
-    setStatus("loading");
-    await waitForPreviewState();
-    setStatus("ready");
+    formAction(new FormData(event.currentTarget));
   }
+
+  const emailError = errors.email ?? state.errors?.email;
+  const passwordError = errors.password ?? state.errors?.password;
 
   return (
     <form onSubmit={onSubmit} noValidate className="space-y-5">
-      <FormField id="login-email" label="Email" error={errors.email}>
+      {notice === "reset" && (
+        <AuthAlert
+          tone="success"
+          title="Password updated"
+          description="Log in with your new password to continue."
+        />
+      )}
+      {notice === "setup" && (
+        <AuthAlert
+          tone="warning"
+          title="Profile setup needs a retry"
+          description="Log in again and we will finish setting up your profile from your verified account."
+        />
+      )}
+
+      <FormField id="login-email" label="Email" error={emailError}>
         <Input
           id="login-email"
           name="email"
@@ -63,17 +89,17 @@ export function LoginForm() {
           placeholder="you@example.com"
           value={values.email}
           onChange={(event) => update("email", event.target.value)}
-          aria-invalid={Boolean(errors.email) || undefined}
-          aria-describedby={errors.email ? "login-email-error" : undefined}
+          aria-invalid={Boolean(emailError) || undefined}
+          aria-describedby={emailError ? "login-email-error" : undefined}
           className="h-11"
-          disabled={status === "loading"}
+          disabled={pending}
         />
       </FormField>
 
       <FormField
         id="login-password"
         label="Password"
-        error={errors.password}
+        error={passwordError}
         hint={
           <span className="flex items-center justify-between gap-3">
             <span>Enter your password.</span>
@@ -92,32 +118,32 @@ export function LoginForm() {
           onChange={(value) => update("password", value)}
           placeholder="Your password"
           autoComplete="current-password"
-          invalid={Boolean(errors.password)}
+          invalid={Boolean(passwordError)}
           describedBy={
-            errors.password ? "login-password-error" : "login-password-hint"
+            passwordError ? "login-password-error" : "login-password-hint"
           }
-          disabled={status === "loading"}
+          disabled={pending}
         />
       </FormField>
 
       <AuthCheckbox
         id="remember"
+        name="remember"
         checked={values.remember}
         onCheckedChange={(checked) => update("remember", checked)}
         label="Keep me signed in on this device"
       />
 
-      {status === "ready" && (
-        <AuthAlert
-          tone="warning"
-          title="Sign-in is not connected yet"
-          description="Your details passed local validation. No account was checked and no session was created."
-        />
+      {state.status === "error" && state.message && (
+        <AuthAlert tone="error" title="Sign-in failed" description={state.message} />
+      )}
+      {state.status === "needs-retry" && state.message && (
+        <AuthAlert tone="warning" title="Almost there" description={state.message} />
       )}
 
       <SubmitButton
         label="Log in"
-        loading={status === "loading"}
+        loading={pending}
         loadingLabel="Signing in…"
       />
 

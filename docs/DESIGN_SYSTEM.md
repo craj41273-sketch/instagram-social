@@ -122,7 +122,7 @@ Route groups give each surface its own shell without changing URLs:
 | SubmitButton | `components/auth/submit-button.tsx` | Full-width primary action with loading state |
 | AuthDivider | `components/auth/auth-divider.tsx` | Decorative separator |
 | SocialLoginButton | `components/auth/social-login-button.tsx` | Disabled Google boundary with pending-setup label |
-| Auth forms | `components/auth/forms/` | Zod-validated, frontend-only forms |
+| Auth forms | `components/auth/forms/` | Zod-validated forms wired to real Supabase Auth server actions |
 
 All landing photography is centralized in `lib/media.ts` and currently points to stable Unsplash CDN IDs. Images are rendered unoptimized because the local arm64 runtime cannot load the native image optimizer; replace the URLs with owned assets when available.
 

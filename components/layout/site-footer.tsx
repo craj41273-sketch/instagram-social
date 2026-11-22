@@ -50,7 +50,7 @@ export async function SiteFooter() {
               world.
             </p>
             <p className="mt-4 text-xs text-muted-foreground">
-              Frontend preview · no accounts or social data are connected yet.
+              Supabase Auth foundation · social features arrive next.
             </p>
           </div>
 

@@ -1,12 +1,17 @@
 "use client";
 
 import * as React from "react";
+import { useActionState } from "react";
 import Link from "next/link";
+import { forgotPasswordAction } from "@/app/actions/auth";
 import { AuthAlert } from "@/components/auth/auth-alert";
 import { SubmitButton } from "@/components/auth/submit-button";
 import { FormField } from "@/components/shared/form-field";
 import { Input } from "@/components/ui/input";
-import { waitForPreviewState } from "@/lib/auth-preview";
+import {
+  initialAuthState,
+  type AuthActionState,
+} from "@/lib/auth/action-state";
 import {
   forgotPasswordSchema,
   toFormErrors,
@@ -17,13 +22,14 @@ import {
 export function ForgotPasswordForm() {
   const [email, setEmail] = React.useState("");
   const [errors, setErrors] = React.useState<FormErrors<ForgotPasswordValues>>({});
-  const [status, setStatus] = React.useState<"idle" | "loading" | "ready">(
-    "idle",
-  );
+  const [state, formAction, pending] = useActionState<
+    AuthActionState<ForgotPasswordValues>,
+    FormData
+  >(forgotPasswordAction, initialAuthState<ForgotPasswordValues>());
 
-  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
+  function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (status === "loading") return;
+    if (pending) return;
 
     const result = forgotPasswordSchema.safeParse({ email });
     if (!result.success) {
@@ -35,18 +41,18 @@ export function ForgotPasswordForm() {
     }
 
     setErrors({});
-    setStatus("loading");
-    await waitForPreviewState();
-    setStatus("ready");
+    formAction(new FormData(event.currentTarget));
   }
+
+  const emailError = errors.email ?? state.errors?.email;
 
   return (
     <form onSubmit={onSubmit} noValidate className="space-y-5">
       <FormField
         id="forgot-email"
         label="Email"
-        hint="We will use this address when email delivery is connected."
-        error={errors.email}
+        hint="We will send a secure recovery link to this address."
+        error={emailError}
       >
         <Input
           id="forgot-email"
@@ -59,25 +65,24 @@ export function ForgotPasswordForm() {
             setEmail(event.target.value);
             setErrors({});
           }}
-          aria-invalid={Boolean(errors.email) || undefined}
-          aria-describedby={errors.email ? "forgot-email-error" : "forgot-email-hint"}
+          aria-invalid={Boolean(emailError) || undefined}
+          aria-describedby={emailError ? "forgot-email-error" : "forgot-email-hint"}
           className="h-11"
-          disabled={status === "loading"}
+          disabled={pending}
         />
       </FormField>
 
-      {status === "ready" && (
-        <AuthAlert
-          tone="warning"
-          title="Recovery is not connected yet"
-          description="Your address passed local validation. No email was sent and no password was changed."
-        />
+      {state.status === "success" && state.message && (
+        <AuthAlert tone="success" title="Check your inbox" description={state.message} />
+      )}
+      {state.status === "error" && state.message && (
+        <AuthAlert tone="error" title="Could not send recovery link" description={state.message} />
       )}
 
       <SubmitButton
         label="Continue"
-        loading={status === "loading"}
-        loadingLabel="Checking…"
+        loading={pending}
+        loadingLabel="Sending recovery link…"
       />
 
       <p className="text-center text-xs text-muted-foreground">

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { AuthFormWrapper } from "@/components/auth/auth-form-wrapper";
 import { VerifyEmailForm } from "@/components/auth/forms/verify-email-form";
+import { LogoutButton } from "@/components/auth/logout-button";
 
 export const metadata: Metadata = {
   title: "Verify email",
@@ -21,9 +22,14 @@ export default async function VerifyEmailPage({
     <AuthFormWrapper
       eyebrow="Email verification"
       title="Verify your email"
-      description="We are ready to confirm your address once Supabase Auth is connected. No verification is simulated here."
+      description="Confirm your address with the link from your inbox. Verification is handled by Supabase Auth."
     >
-      <VerifyEmailForm token={token} />
+      <div className="space-y-6">
+        <VerifyEmailForm token={token} />
+        <div className="border-t border-border/60 pt-4">
+          <LogoutButton />
+        </div>
+      </div>
     </AuthFormWrapper>
   );
 }

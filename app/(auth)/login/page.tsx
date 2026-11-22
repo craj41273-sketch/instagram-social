@@ -8,12 +8,19 @@ export const metadata: Metadata = {
   description: "Log in to your Luma account.",
 };
 
-export default function LoginPage() {
+type LoginPageProps = {
+  searchParams: Promise<{ reset?: string; setup?: string }>;
+};
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const params = await searchParams;
+  const notice = params.reset === "success" ? "reset" : params.setup === "retry" ? "setup" : null;
+
   return (
     <AuthFormWrapper
       eyebrow="Welcome back"
       title="Log in to Luma"
-      description="Your photographs and people are waiting. Sign-in is prepared for a future backend block."
+      description="Your photographs and people are waiting. Sign in with your Luma account."
       footer={
         <p>
           Having trouble?{" "}
@@ -26,7 +33,7 @@ export default function LoginPage() {
         </p>
       }
     >
-      <LoginForm />
+      <LoginForm notice={notice} />
     </AuthFormWrapper>
   );
 }

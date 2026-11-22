@@ -12,7 +12,7 @@ export default function ForgotPasswordPage() {
     <AuthFormWrapper
       eyebrow="Account recovery"
       title="Forgot your password?"
-      description="Enter the email on your account. Recovery is not connected yet, so nothing will be sent."
+      description="Enter the email on your account. We will send a secure recovery link."
     >
       <ForgotPasswordForm />
     </AuthFormWrapper>

@@ -46,14 +46,19 @@ Status legend: `[x]` complete, `[~]` in progress, `[ ]` planned.
 - [x] Semantic markup, labelled controls, keyboard navigation, focus states, reduced-motion support
 - [x] Verify every route over HTTP, exercise validation rules directly, run typecheck, lint, and production build
 
-## Block 4 — Identity and data foundation
+## Block 4 — Identity and data foundation (complete)
 
-- [ ] Neon database provisioning and Drizzle migration workflow
-- [ ] Profile and core domain schema
-- [ ] Supabase Auth: sign up, sign in, sign out, and callback handling
-- [ ] Session middleware and protected route groups
-- [ ] Profile creation/onboarding
-- [ ] Application service/repository boundaries
+- [x] Neon/Drizzle client setup, validated env layer, and generated migration workflow
+- [x] Foundational `users` and `profiles` schema (no social domain tables)
+- [x] Real Supabase Auth sign up, sign in, sign out, email verification, recovery, and password update
+- [x] PKCE callback and OTP confirmation route handlers with an allowlisted OTP type
+- [x] Next.js 16 `proxy.ts` session refresh and auth-only/public redirect rules
+- [x] Server-derived identity mapping with idempotent, duplicate-safe user/profile initialization and retry paths
+- [x] Server action boundaries, DAL helpers, safe errors, shared Zod validation, and rate-limit preparation
+- [x] Storage bucket constants and a documented Neon/Realtime architecture note
+- [x] Backend tests, typecheck, lint, and production build verification
+
+> Remote Neon migration/query execution and live Supabase signup/login/email delivery still require real credentials in `.env.local`; they were not claimed as verified. See `docs/BACKEND.md` and the completion report.
 
 ## Block 5 — Feed and posts
 
