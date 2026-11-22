@@ -1,17 +1,13 @@
 import type { NextConfig } from "next";
 
+/**
+ * Webpack is used explicitly because this environment runs on Android/arm64,
+ * where Turbopack native bindings are unavailable. On a supported machine the
+ * `--webpack` flags in package.json can be removed to use Turbopack.
+ */
 const nextConfig: NextConfig = {
-  /* config options here */
   cacheComponents: true,
   partialPrefetching: true,
-  turbopack: {
-    rules: {
-      "*.css": {
-        loaders: ["@tailwindcss/turbopack"],
-        as: "*.css",
-      },
-    },
-  },
 };
 
 export default nextConfig;
