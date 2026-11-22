@@ -1,0 +1,101 @@
+# Luma design system
+
+Luma is an original, dark-first visual language for a premium photo-sharing product. It borrows nothing from existing social logos or UI kits: the mark is a prism, the palette is violet light on near-black, and the typography pairs a geometric sans with a refined serif display.
+
+## Brand identity
+
+- **Name:** Luma — light, luminance, and luminous frames.
+- **Mark:** prism silhouette with a central point of light; gradient from violet to sky blue.
+- **Personality:** quiet, precise, warm, and confident. No novelty gradients or loud shadows.
+- **Favicon / mark:** `app/icon.svg` and `components/shared/brand.tsx`.
+
+## Color tokens
+
+All colors are CSS custom properties in `app/globals.css` and are exposed as Tailwind utilities via `@theme inline`.
+
+| Token | Purpose | Dark (default) | Light (opt-in) |
+| --- | --- | --- | --- |
+| `background` | App canvas | near-black violet | near-white |
+| `foreground` | Primary text | off-white | near-black |
+| `surface` / `surface-elevated` | Quiet content planes | charcoal | soft white |
+| `card` / `card-foreground` | Cards and panels | slightly lighter | white |
+| `popover` | Menus, dialogs, tooltips | elevated surface | white |
+| `primary` / `primary-foreground` | Brand actions | violet | deeper violet |
+| `secondary` | Low-emphasis actions | charcoal | mist |
+| `muted` / `muted-foreground` | Secondary surfaces/text | muted charcoal | muted slate |
+| `accent` | Hover/selected state | violet-tinted | violet-tinted |
+| `destructive` | Errors, danger actions | soft red | deep red |
+| `success` | Positive status | green | green |
+| `warning` | Caution status | amber | amber |
+| `border` / `input` | Subtle separation | translucent gray | light gray |
+| `ring` | Keyboard focus | violet | violet |
+| `chart-1…5` | Data accents | violet → rose | violet → rose |
+
+Semantic extras: `bg-surface`, `bg-surface-elevated`, `text-success`, `bg-warning/12`, `text-destructive`, etc.
+
+## Typography
+
+- **Interface:** Geist (`--font-geist`) via `next/font/google`.
+- **Display:** Instrument Serif (`--font-display-var`) for headings and wordmark.
+- **Tailwind tokens:** `font-sans`, `font-heading`, `text-display`, `text-headline`, `text-title`.
+- **Scale:** display `3.25rem`, headline `2.25rem`, title `1.375rem`, plus Tailwind's default `xs`–`6xl` scale.
+
+## Spacing
+
+Semantic tokens in `@theme`: `--spacing-gutter` (`1.5rem`), `--spacing-card` (`1.25rem`), `--spacing-section` (`4rem`). Components use Tailwind's numeric scale consistently: `2`, `3`, `4`, `6`, `8`, `12`, `16`, `24`.
+
+## Radius
+
+Token `--radius` is `0.875rem`; derived utilities: `rounded-sm`, `rounded-md`, `rounded-lg`, `rounded-xl`, `rounded-2xl`, `rounded-3xl`, `rounded-4xl`, and `rounded-full` for avatars/pills.
+
+## Elevation
+
+- `shadow-soft` — default card/media lift.
+- `shadow-lift` — dialogs, floating panels.
+- `shadow-glow` — primary gradient button halo.
+
+## Motion
+
+- Global easing token `--ease-soft` (`cubic-bezier(0.22, 1, 0.36, 1)`).
+- 150–500 ms transitions for hover, focus, dropdowns, dialogs, toasts, and image zoom.
+- `prefers-reduced-motion: reduce` collapses animations and transitions globally.
+
+## Responsive breakpoints
+
+Tailwind defaults (`sm`, `md`, `lg`, `xl`, `2xl`) plus custom `3xl` (`96rem`) for ultra-wide screens. Layouts are mobile-first; the design system page includes a live breakpoint indicator.
+
+## Components
+
+| Component | File | Notes |
+| --- | --- | --- |
+| Button | `components/ui/button.tsx` | shadcn/ui primitive; sizes `xs`, `sm`, `default`, `lg`, `icon*` |
+| PremiumButton | `components/ui/premium-button.tsx` | `gradient`, `soft`, `outline`, `ghost`, `danger` variants |
+| IconButton | `components/ui/icon-button.tsx` | Required `label`, auto tooltip, `aria-label` |
+| Input | `components/ui/input.tsx` | shadcn/ui; dark-aware focus ring |
+| Textarea | `components/ui/textarea.tsx` | shadcn/ui |
+| FormField | `components/shared/form-field.tsx` | Semantic label/hint/error wrapper |
+| Avatar system | `components/ui/avatar.tsx` | Image + initials fallback; used by UserPreview |
+| Badge | `components/ui/badge.tsx` | shadcn/ui base |
+| StatusBadge | `components/ui/status-badge.tsx` | `neutral`, `brand`, `success`, `warning`, `danger` |
+| Card | `components/ui/card.tsx` | shadcn/ui; `font-heading` titles |
+| Dialog / Modal | `components/ui/dialog.tsx` | Radix focus trap + animation |
+| Dropdown | `components/ui/dropdown-menu.tsx` | Radix keyboard navigation |
+| Tooltip | `components/ui/tooltip.tsx` + `TooltipProvider` | Radix; icon buttons get one automatically |
+| Tabs | `components/ui/tabs.tsx` | Radix |
+| Skeleton | `components/ui/skeleton.tsx` + `components/shared/skeletons.tsx` | Lines, avatars, user previews, cards |
+| Spinner | `components/ui/spinner.tsx` | Accessible `role="status"` |
+| Toast | `components/ui/toast.tsx` | Radix provider + `useToast()` with tones |
+| ImageContainer | `components/shared/image-container.tsx` | Ratios, next/image, loading skeleton, gradient fallback |
+| UserPreview | `components/shared/user-preview.tsx` | Avatar, name, handle, verified, presence |
+| EmptyState | `components/shared/empty-state.tsx` | Icon, title, description, action |
+| ErrorState | `components/shared/error-state.tsx` | `role="alert"`, title, description, action |
+| ThemeToggle | `components/shared/theme-toggle.tsx` | Toggles optional light mode; dark is default |
+
+## Usage rules
+
+1. Use tokens (`bg-surface`, `text-muted-foreground`, `shadow-lift`) instead of raw colors.
+2. Compose from the components above rather than duplicating utility strings.
+3. Keep controls semantic: real `<button>`, `<label>`, `<input>`, and Radix primitives.
+4. Prefer `PremiumButton` for primary moments; use `Button` for routine actions.
+5. Add new primitives through `npx shadcn@latest add …`, then wrap them in `components/ui/` or `components/shared/` for app-specific variants.
+6. Verify with `npm run check`, `npm run build`, and the `/design-system` page before shipping changes.

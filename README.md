@@ -1,15 +1,15 @@
-# Instagram Social
+# Luma
 
-Premium Instagram-inspired social media web application. **Block 1 is complete: the repository contains only the project foundation and application shell.** No social features (posts, likes, comments, messaging, etc.) have been implemented yet.
+Premium, dark-first photo-sharing experience built on Next.js. **Blocks 1–2 are complete: the repository contains the project foundation and a full design system.** No social features (posts, likes, comments, messaging, etc.) have been implemented yet.
 
 ## Stack
 
 | Concern | Choice |
 | --- | --- |
 | Framework | Next.js 16 (App Router, React Server Components) |
-| Language | TypeScript (strict) |
+| Language | TypeScript (strict + extra checks) |
 | Styling | Tailwind CSS v4 |
-| UI | shadcn/ui (Radix primitives) |
+| UI | shadcn/ui (Radix primitives) + custom design-system wrappers |
 | Icons | Lucide |
 | Database | Neon PostgreSQL |
 | ORM | Drizzle ORM + Drizzle Kit |
@@ -19,12 +19,20 @@ Premium Instagram-inspired social media web application. **Block 1 is complete: 
 | Package manager | npm |
 | Source control | Git / GitHub |
 
+## Design system
+
+The original **Luma** identity uses a prism mark, near-black surfaces, violet accents, Geist + Instrument Serif typography, and subtle motion. Dark mode is the default; light mode is an optional toggle in the header.
+
+- Live showcase: [`/design-system`](http://localhost:3000/design-system)
+- Tokens and component reference: [`docs/DESIGN_SYSTEM.md`](docs/DESIGN_SYSTEM.md)
+- Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+
 ## Prerequisites
 
 - Node.js 20.9+ (verified on Node.js 26)
 - npm 10+
 - Git
-- A Neon PostgreSQL database and a Supabase project (needed from Block 2 onward)
+- A Neon PostgreSQL database and a Supabase project (needed from Block 3 onward)
 
 ## Getting started
 
@@ -35,9 +43,9 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Open <http://localhost:3000>. The foundation page renders without any external service configured; the environment variables are only read lazily when a data/auth module is actually used.
+Open <http://localhost:3000>. The landing page and design system render without any external service configured; environment variables are only read lazily when a data/auth module is actually used.
 
-> **Platform note:** `dev` and `build` deliberately pass `--webpack`. This repository was initialized on Android/arm64, where Turbopack native bindings are unavailable. On macOS, Windows, or Linux you may remove the flag to use Turbopack (also remove the PostCSS setup only if you reconfigure Tailwind for Turbopack).
+> **Platform note:** `dev` and `build` deliberately pass `--webpack`. This project was initialized on Android/arm64, where Turbopack native bindings are unavailable. On a supported machine you may remove the flag.
 
 ## Scripts
 
@@ -65,31 +73,31 @@ Copy `.env.example` to `.env.local` and fill in real values. `.env*` files are i
 ## Structure
 
 ```text
-app/                 App Router routes and global styles
-components/ui/       Generated shadcn/ui primitives
-components/layout/   Header, footer, page container
-components/shared/   Reusable cross-cutting UI (brand, etc.)
-lib/auth/            Supabase browser/server/admin clients
-lib/db/              Drizzle client and schema
-lib/env/             Validated environment access
-lib/validations/     Zod schemas
-hooks/               Shared React hooks
-types/               Shared TypeScript types
-docs/                Architecture and coding standards
-public/              Static assets
+app/                  Routes, layouts, global styles, design-system showcase
+components/ui/        shadcn/ui primitives + app-wide wrappers
+components/layout/    Header, footer, page container
+components/shared/    Brand, theme, states, media, identity components
+lib/auth/             Supabase browser/server/admin clients
+lib/db/               Drizzle client and schema
+lib/env/              Validated environment access
+lib/validations/      Zod schemas
+hooks/                Shared React hooks
+types/                Shared TypeScript types
+docs/                 Architecture, coding standards, design system
+public/               Static assets
 ```
-
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/CODING_STANDARDS.md`](docs/CODING_STANDARDS.md), [`PROJECT_ROADMAP.md`](PROJECT_ROADMAP.md), and [`AGENTS.md`](AGENTS.md) before contributing.
 
 ## Current status
 
 - [x] Next.js App Router + TypeScript strict mode
-- [x] Tailwind CSS and shadcn/ui (Radix, Lucide)
-- [x] Clean layered folder structure
+- [x] Tailwind CSS, shadcn/ui, Lucide, PostCSS/Webpack setup
+- [x] Clean layered folder structure and reusable utilities
 - [x] Lazy, typed Drizzle/Neon and Supabase clients
 - [x] Environment validation and `.env.example`
-- [x] Application shell, loading/error/not-found states
+- [x] Original Luma brand, dark-first tokens, optional light theme
+- [x] Complete reusable component library and state components
+- [x] Responsive design-system showcase at `/design-system`
 - [x] Typecheck, lint, build, and dev server verification
-- [ ] Authentication flows (Block 2)
-- [ ] Domain schema and migrations (Block 2)
+- [ ] Authentication flows (Block 3)
+- [ ] Domain schema and migrations (Block 3)
 - [ ] Posts, feed, likes, comments, follows, stories, messaging, notifications, search, explore (later blocks)

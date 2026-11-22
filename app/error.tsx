@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { PageContainer } from "@/components/layout/page-container";
+import Link from "next/link";
+import { ErrorState } from "@/components/shared/error-state";
+import { PremiumButton } from "@/components/ui/premium-button";
 
 interface ErrorBoundaryProps {
   error: Error & { digest?: string };
@@ -16,20 +16,18 @@ export default function ErrorBoundary({ error, reset }: ErrorBoundaryProps) {
   }, [error]);
 
   return (
-    <PageContainer className="flex min-h-[60vh] flex-col items-center justify-center py-16 text-center">
-      <h1 className="text-3xl font-semibold tracking-tight">
-        Something went wrong
-      </h1>
-      <p className="mt-3 max-w-md text-muted-foreground">
-        An unexpected error occurred. You can try again or return to the home
-        page.
-      </p>
-      <div className="mt-8 flex gap-3">
-        <Button onClick={reset}>Try again</Button>
-        <Button variant="outline" asChild>
-          <Link href="/">Go home</Link>
-        </Button>
-      </div>
-    </PageContainer>
+    <ErrorState
+      className="m-4 mt-10 sm:m-8"
+      title="We lost the light for a moment"
+      description="An unexpected error interrupted this view. Try again or return to the start."
+      action={
+        <div className="flex flex-wrap justify-center gap-3">
+          <PremiumButton onClick={reset}>Try again</PremiumButton>
+          <PremiumButton premiumVariant="outline" asChild>
+            <Link href="/">Go home</Link>
+          </PremiumButton>
+        </div>
+      }
+    />
   );
 }

@@ -11,7 +11,7 @@ export async function SiteFooter() {
         <p>
           &copy; {year} {APP_NAME}
         </p>
-        <p>Architecture foundation &middot; Block 1</p>
+        <p>Design system &middot; Block 2</p>
       </PageContainer>
     </footer>
   );

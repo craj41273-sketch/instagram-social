@@ -47,6 +47,16 @@ types/                Plain shared TypeScript types
 docs/                 Living architecture and standards documentation
 ```
 
+## Design system layer
+
+The UI layer is backed by a documented design system (`docs/DESIGN_SYSTEM.md`):
+
+- **Tokens** live in `app/globals.css` as CSS variables and Tailwind `@theme` entries. Components consume semantic utilities (`bg-surface`, `text-muted-foreground`, `shadow-lift`) rather than raw colors.
+- **Primitives** in `components/ui/` are either generated shadcn/ui components or thin wrappers around them (`PremiumButton`, `IconButton`, `StatusBadge`, `Spinner`, `Toast`). Generated files are not edited by hand.
+- **Composite components** in `components/shared/` combine primitives into reusable patterns: `Brand`, `ThemeToggle`, `UserPreview`, `ImageContainer`, `EmptyState`, `ErrorState`, form fields, and skeletons.
+- **Providers** are mounted once in the root layout: `ThemeProvider` (dark-first theme), `TooltipProvider`, and `ToastProvider`. They are client components that wrap server-rendered children.
+- **Showcase** at `/design-system` is a client route that exercises every primitive and state without introducing product features.
+
 ## Domain plan (not yet implemented)
 
 Domain tables will be added incrementally in `lib/db/schema.ts` with generated migrations in `drizzle/`: `profiles`, `posts`, `post_media`, `likes`, `comments`, `follows`, `stories`, `story_views`, `conversations`, `messages`, `notifications`, and `saved_posts`. Row level security in Supabase will complement application-level authorization; service-role access stays confined to `lib/auth/server.ts`.

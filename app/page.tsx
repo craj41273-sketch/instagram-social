@@ -1,71 +1,78 @@
-import {
-  ArrowUpRight,
-  Database,
-  Layers3,
-  ShieldCheck,
-  Sparkles,
-} from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { ArrowRight, Layers3, Palette, Sparkles, Type } from "lucide-react";
 import { PageContainer } from "@/components/layout/page-container";
-import { FOUNDATION_LAYERS } from "@/lib/constants";
+import { Brand } from "@/components/shared/brand";
+import { ImageContainer } from "@/components/shared/image-container";
+import { PremiumButton } from "@/components/ui/premium-button";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { DESIGN_PRINCIPLES } from "@/lib/constants";
 
-const layerIcons = [Layers3, Database, ShieldCheck, Sparkles] as const;
+const principleIcons = [Sparkles, Palette, Type, Layers3] as const;
 
 export default function Home() {
   return (
-    <PageContainer className="py-16 sm:py-24">
-      <section className="max-w-2xl">
-        <Badge variant="outline" className="mb-5">
-          Block 1 &middot; Foundation
-        </Badge>
-        <h1 className="font-heading text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
-          A premium foundation for what comes next.
-        </h1>
-        <p className="mt-5 text-base leading-relaxed text-muted-foreground sm:text-lg">
-          The application shell, tooling, and architecture boundaries are in
-          place. Social features are intentionally deferred to later blocks.
-        </p>
-      </section>
+    <PageContainer className="py-14 sm:py-20 lg:py-24">
+      <section className="grid items-center gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16">
+        <div>
+          <StatusBadge tone="brand" className="mb-6">
+            Design system &middot; Block 2
+          </StatusBadge>
+          <h1 className="max-w-2xl font-heading text-display sm:text-[4rem] lg:text-[4.5rem]">
+            Light, framed beautifully.
+          </h1>
+          <p className="mt-6 max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">
+            Luma is a dark-first visual language for a modern photo-sharing
+            product: quiet surfaces, violet light, generous spacing, and
+            components that feel considered on every screen.
+          </p>
+          <div className="mt-9 flex flex-wrap items-center gap-3">
+            <PremiumButton asChild>
+              <a href="/design-system">
+                Explore the system
+                <ArrowRight className="size-4" aria-hidden="true" />
+              </a>
+            </PremiumButton>
+            <StatusBadge tone="neutral">No social features yet</StatusBadge>
+          </div>
+        </div>
 
-      <section
-        aria-label="Architecture layers"
-        className="mt-14 grid gap-4 sm:grid-cols-2"
-      >
-        {FOUNDATION_LAYERS.map((layer, index) => {
-          const Icon = layerIcons[index] ?? Layers3;
-
-          return (
-            <Card key={layer.title} className="h-full">
-              <CardHeader>
-                <div className="mb-2 flex size-9 items-center justify-center rounded-lg bg-muted text-foreground">
-                  <Icon className="size-4" aria-hidden="true" />
-                </div>
-                <CardTitle>{layer.title}</CardTitle>
-                <CardDescription>{layer.description}</CardDescription>
-              </CardHeader>
-            </Card>
-          );
-        })}
-      </section>
-
-      <Card className="mt-6 bg-muted/40">
-        <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="font-medium">Next milestone</p>
-            <p className="text-sm text-muted-foreground">
-              Authentication, database schema, and the first protected routes.
+        <div className="relative">
+          <div className="absolute -inset-8 rounded-[3rem] bg-primary/[0.07] blur-3xl" aria-hidden="true" />
+          <ImageContainer
+            alt="Abstract Luma artwork"
+            ratio="portrait"
+            className="relative mx-auto max-w-sm shadow-lift"
+          />
+          <div className="absolute -bottom-5 -left-3 rounded-2xl border border-border/70 bg-card/90 p-4 shadow-lift backdrop-blur-xl sm:-left-8">
+            <Brand compact />
+            <p className="mt-2 text-xs text-muted-foreground">
+              Premium by restraint
             </p>
           </div>
-          <ArrowUpRight className="size-5 text-muted-foreground" aria-hidden="true" />
-        </CardContent>
-      </Card>
+        </div>
+      </section>
+
+      <section aria-label="Design principles" className="mt-20 sm:mt-24">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {DESIGN_PRINCIPLES.map((principle, index) => {
+            const Icon = principleIcons[index] ?? Sparkles;
+
+            return (
+              <article
+                key={principle.title}
+                className="rounded-2xl border border-border/60 bg-card/60 p-card transition-colors duration-200 hover:border-border hover:bg-card"
+              >
+                <span className="mb-4 flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <Icon className="size-4" aria-hidden="true" />
+                </span>
+                <h2 className="font-heading text-title">{principle.title}</h2>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                  {principle.description}
+                </p>
+              </article>
+            );
+          })}
+        </div>
+      </section>
     </PageContainer>
   );
 }

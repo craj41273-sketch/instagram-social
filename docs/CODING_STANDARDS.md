@@ -37,6 +37,14 @@
 - Components and types: `PascalCase`. Functions/variables: `camelCase`. Constants: `SCREAMING_SNAKE_CASE`.
 - Use the `@/*` import alias instead of long relative paths.
 
+## Design system
+
+- Follow `docs/DESIGN_SYSTEM.md` for tokens, components, and usage rules.
+- Use semantic Tailwind tokens; avoid raw hex colors and bespoke shadows.
+- Compose from existing UI/shared components before creating new ones.
+- Keep dark mode as the default; light mode is an opt-in class managed by `ThemeProvider`.
+- Preserve keyboard focus styles, `aria-label`s on icon-only controls, and reduced-motion behavior.
+
 ## Commits and changes
 
 - One logical change per commit; imperative commit subjects (e.g., `Add auth callback route`).

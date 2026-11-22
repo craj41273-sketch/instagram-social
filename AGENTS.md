@@ -26,7 +26,12 @@ You are working on a premium Instagram-inspired social application. Follow these
 - Never import server-only modules (`lib/db/index.ts`, `lib/env/server.ts`, `lib/auth/server.ts`) from client code.
 - Never read `process.env` directly outside `lib/env/`. Never expose `DATABASE_URL` or `SUPABASE_SERVICE_ROLE_KEY` with a `NEXT_PUBLIC_` prefix.
 - Do not call `getServerEnv()` at module import time.
-- Use `@/*` imports, `cn()` for class merging, and Lucide icons. Do not hand-edit generated `components/ui/` primitives; use `npx shadcn@latest add <name>`.
+- Use `@/*` imports, `cn()` for class merging, and Lucide icons. Do not hand-edit generated `components/ui/` primitives; use `npx shadcn@latest add <name>` and add app-specific variants as wrappers instead.
+- Follow `docs/DESIGN_SYSTEM.md`. Use semantic tokens (`bg-surface`, `text-muted-foreground`, `shadow-lift`, `ease-soft`) instead of raw colors or one-off styles.
+- Compose UI from the existing library in `components/ui/` and `components/shared/`; do not duplicate utility strings or build parallel component systems.
+- Keep dark mode as the default. Light mode is opt-in via `ThemeProvider`; never hard-code light-only or dark-only colors.
+- Use `EmptyState`, `ErrorState`, `Skeleton`/`Spinner`, and `useToast()` for loading, failure, and feedback states. Keep all controls keyboard accessible and preserve reduced-motion behavior.
+- The `/design-system` route is the living reference. Update it and `docs/DESIGN_SYSTEM.md` whenever a token or shared component changes.
 
 ## Quality bar
 
