@@ -6,8 +6,21 @@ export const AUTHENTICATED_HOME = "/";
 /** Public pages that authenticated visitors should not see. */
 export const AUTH_ONLY_ROUTES = ["/login", "/signup"] as const;
 
-/** Route prefixes reserved for future authenticated areas (Block 5+). */
-export const PROTECTED_ROUTE_PREFIXES: readonly string[] = [];
+/**
+ * Optimistic proxy protection. Public `/profile/[username]` pages intentionally
+ * stay open; authoritative ownership checks still live in the DAL/actions.
+ */
+export const PROTECTED_ROUTE_PREFIXES: readonly string[] = ["/profile/edit"];
+
+/**
+ * Exact-or-child matching prevents `/profile/editor` from being mistaken for
+ * the `/profile/edit` settings route.
+ */
+export function isProtectedRoute(pathname: string): boolean {
+  return PROTECTED_ROUTE_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
 
 export const LOGIN_ROUTE = "/login";
 export const SIGNUP_ROUTE = "/signup";

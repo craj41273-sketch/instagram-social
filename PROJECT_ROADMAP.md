@@ -60,20 +60,30 @@ Status legend: `[x]` complete, `[~]` in progress, `[ ]` planned.
 
 > Remote Neon migration/query execution and live Supabase signup/login/email delivery still require real credentials in `.env.local`; they were not claimed as verified. See `docs/BACKEND.md` and the completion report.
 
-## Block 5 — Feed and posts
+## Block 5 — User profiles and social graph (complete)
 
-- [ ] Post creation with image upload to Supabase Storage
+- [x] Inspect existing rules, schema, auth, DB config, protection, UI, tokens, Git state, and profile routes
+- [x] Add `location` to profiles and a constrained `follows` table; `users.username` remains authoritative
+- [x] Generate an additive Drizzle migration with UUID PK, FKs, unique pair, indexes, cascade delete, and self-follow CHECK
+- [x] Public `/profile/[username]` pages with avatar, cover, bio, website, location, and empty Posts/Tagged tabs
+- [x] DB-backed follower/following counts and an honest posts placeholder
+- [x] Owner-only `/profile/edit` with server-derived identity, Zod validation, availability checks, and atomic updates
+- [x] Real follow/unfollow actions with authentication, self-follow prevention, duplicate-safe inserts, and idempotent deletes
+- [x] Cursor-prepared follower/following pages with batched follow-status queries
+- [x] Authenticated, rate-limited username lookup foundation (`/api/users/search`)
+- [x] Supabase Storage rendering boundary with safe URLs and polished fallbacks; no fake uploads
+- [x] Reusable profile/follow operations, actions, components, structural tests, and opt-in DB integration tests
+- [x] Documentation for schema, routes, security, migration steps, and known limitations
+
+> Remote Neon migration/query execution and live Supabase authenticated tests still require real credentials; they were not claimed as verified. See `docs/PROFILES.md`.
+
+## Block 6 — Feed and posts
+
+- [ ] Post creation with validated Supabase Storage uploads
 - [ ] Feed queries with pagination and optimistic UI
 - [ ] Post detail route
 - [ ] Likes and save state
 - [ ] Comments and replies
-
-## Block 6 — Social graph
-
-- [ ] Follow/unfollow actions and follower lists
-- [ ] Suggested users and search
-- [ ] Explore grid
-- [ ] Profile pages with tabs
 
 ## Block 7 — Stories and notifications
 

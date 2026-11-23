@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  check,
   index,
   pgTable,
   text,
@@ -9,9 +10,10 @@ import {
 } from "drizzle-orm/pg-core";
 
 /**
- * Foundational application schema. Supabase Auth owns credentials and
- * identities; Neon owns these application records. Only users and profiles
- * exist in this block — social domain tables arrive in later blocks.
+ * Application schema. Supabase Auth owns credentials and identities; Neon owns
+ * these records. `users.username` is the single authoritative username source;
+ * profiles never duplicate it. Block 5 adds profile location and the social
+ * graph edge table `follows`.
  */
 export const users = pgTable(
   "users",
@@ -52,6 +54,7 @@ export const profiles = pgTable(
     avatarUrl: text("avatar_url"),
     coverUrl: text("cover_url"),
     website: text("website"),
+    location: text("location"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -65,7 +68,40 @@ export const profiles = pgTable(
   ],
 );
 
+/**
+ * Directed social graph edge: `follower_id -> following_id`. Both sides point
+ * at application users (not Supabase auth IDs), so deletion cascades with the
+ * user row. The database enforces uniqueness and self-follow prevention.
+ */
+export const follows = pgTable(
+  "follows",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    followerId: uuid("follower_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    followingId: uuid("following_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("follows_follower_following_unique").on(
+      table.followerId,
+      table.followingId,
+    ),
+    index("follows_follower_idx").on(table.followerId),
+    index("follows_following_idx").on(table.followingId),
+    index("follows_created_at_idx").on(table.createdAt),
+    check("follows_no_self_check", sql`${table.followerId} <> ${table.followingId}`),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Profile = typeof profiles.$inferSelect;
 export type NewProfile = typeof profiles.$inferInsert;
+export type Follow = typeof follows.$inferSelect;
+export type NewFollow = typeof follows.$inferInsert;

@@ -1,16 +1,17 @@
 # Backend foundation (Block 4)
 
-This document describes the real backend introduced in Block 4. Blocks 1–3
-(design system, landing page, and auth UI) are preserved; this block only wires
-those screens to Neon and Supabase and adds the server-side foundation.
+This document describes the backend introduced in Block 4 and extended in Block
+5. Blocks 1–3 (design system, landing page, and auth UI) are preserved. Block 4
+wired those screens to Neon and Supabase; Block 5 added profile/follow data and
+operations. Block 5 details live in `docs/PROFILES.md`.
 
 ## Responsibilities
 
 | Concern | Owner | Notes |
 | --- | --- | --- |
 | UI | Next.js App Router, React, Tailwind | Existing Luma design system; no redesign |
-| Application logic | Server actions in `app/actions/auth.ts`, services in `lib/` | Zod validation, rate limiting, safe errors |
-| Primary database | Neon PostgreSQL | Only app data (`users`, `profiles`) lives here |
+| Application logic | Server actions in `app/actions/`, services in `lib/` | Zod validation, rate limiting, safe errors |
+| Primary database | Neon PostgreSQL | App data: `users`, `profiles`, `follows` |
 | ORM | Drizzle via `getDb()` | Lazy, cached `neon-http` client |
 | Identity provider | Supabase Auth | Sessions in HttpOnly-ish cookies via `@supabase/ssr` |
 | Storage | Supabase Storage | Boundary only; no buckets/created uploads |
@@ -50,16 +51,21 @@ Rules:
   (unique), `created_at`, `updated_at`.
 - **profiles**: `id` (UUID PK), `user_id` (unique, FK → `users.id` on delete
   cascade), `display_name`, `bio`, `avatar_url`, `cover_url`, `website`,
-  `created_at`, `updated_at`.
+  `location`, `created_at`, `updated_at`.
+- **follows**: `id` (UUID PK), `follower_id`/`following_id` (FK → `users.id`,
+  cascade), `created_at`, unique pair, self-follow CHECK.
 
 Indexes: unique indexes on `users.auth_user_id`, `users.username`,
-`lower(users.username)`, `profiles.user_id`; plain indexes on `users.email`
-and `profiles.created_at`.
+`lower(users.username)`, `profiles.user_id`, and
+`(follows.follower_id, follows.following_id)`; plain indexes on `users.email`,
+`profiles.created_at`, `follows.follower_id`, `follows.following_id`, and
+`follows.created_at`.
 
 Usernames are normalized to lowercase by the shared Zod schema before any
 write. The `lower(username)` unique index is defense in depth.
+`users.username` is the only authoritative username column.
 
-No post, like, comment, follow, story, message, or notification tables exist.
+No post, like, comment, story, message, or notification tables exist.
 
 ### Migrations
 
@@ -70,11 +76,12 @@ npm run db:studio     # inspect the database with Drizzle Studio
 npm run db:push       # development-only schema push; avoid on shared/production DBs
 ```
 
-Generated migration: `drizzle/0000_nosy_zaran.sql`. It was generated locally;
-it has **not** been applied to a remote database because no real Neon
-credentials were available. Apply it manually with `npm run db:migrate` after
-setting `DATABASE_URL`. Never run a destructive migration against a database
-with data without reviewing it first.
+Generated migrations: `drizzle/0000_nosy_zaran.sql` (Block 4) and
+`drizzle/0001_high_quentin_quire.sql` (Block 5: `follows` + `location`). Both
+were generated locally; they have **not** been applied to a remote database
+because no real Neon credentials were available. Apply them manually with
+`npm run db:migrate` after setting `DATABASE_URL`. Never run a destructive
+migration against a database with data without reviewing it first.
 
 ## Identity mapping
 
@@ -114,8 +121,10 @@ Supabase Auth user.id  →  users.auth_user_id  →  profiles.user_id
 
 `proxy.ts` refreshes the session with `supabase.auth.getUser()` and redirects
 authenticated visitors away from `/login` and `/signup`. Unauthenticated access
-to future protected prefixes redirects to `/login?next=...`. `PROTECTED_ROUTE_PREFIXES`
-is empty in Block 4 so all existing public pages remain public.
+to protected prefixes redirects to `/login?next=...`. Block 5 protects
+`/profile/edit` with exact-or-child matching; public profile pages remain
+public. `isProtectedRoute()` in `lib/auth/constants.ts` avoids accidental
+matches such as `/profile/editor`.
 
 ### Email template setup
 
@@ -137,7 +146,7 @@ the app handles both cases.
 - `getCurrentUser()` — cached, server-verified Supabase user or `null`.
 - `requireAuthenticatedUser()` — redirects to `/login` when absent.
 - `getCurrentProfile()` — joins the server-derived identity to Neon.
-- `requireProfile()` — fails closed for future authenticated features.
+- `requireProfile()` — fails closed for owner-only features such as `/profile/edit`.
 
 These are server-only and are not imported by client components. Proxy checks
 are optimistic; server actions and the DAL perform the authoritative checks.
@@ -150,8 +159,11 @@ are optimistic; server actions and the DAL perform the authoritative checks.
 - Service-role key and Neon URL never sent to the browser.
 - Safe, curated error messages; raw SDK/database errors logged server-side.
 - Redirect destinations restricted to same-origin paths.
-- In-process rate-limit preparation on signup/login/recovery/resend. Replace
-  with a shared store before multi-instance deployment.
+- In-process rate-limit preparation on signup/login/recovery/resend and Block 5
+  profile/follow/search endpoints. Replace with a shared store before
+  multi-instance deployment.
+- Database constraints back application checks for usernames, follow uniqueness,
+  self-follows, and cascade deletion.
 - Storage bucket names are constants; no public bucket is created implicitly.
 
 ## Realtime architecture
@@ -173,7 +185,9 @@ No messaging or realtime feature is implemented in this block.
 `lib/storage/index.ts` defines future bucket names: `avatars`, `post-media`,
 `stories`, `message-attachments`, plus a storage client boundary and key
 normalizer. No bucket is created, no upload route exists, and no object is made
-public. Bucket privacy will be evaluated per feature in later blocks.
+public. Block 5 renders `avatar_url`/`cover_url` only for safe HTTP(S) values and
+uses polished fallbacks otherwise. Bucket privacy and upload policies will be
+evaluated when real media creation arrives in Block 6.
 
 ## Testing and status
 
@@ -189,8 +203,11 @@ npm run build
 `npm test` uses Node's built-in test runner with a tiny local TS resolve hook;
 no new dependency was added. It covers validation, schema shape, identity
 input rejection, atomic/idempotent SQL generation, rate limiting, redirects,
-and safe error mapping.
+safe error mapping, follow constraints, cursors, and migration safety. A real
+Neon constraint test is opt-in via `LUMA_DB_INTEGRATION=1` plus `DATABASE_URL`
+against an already-migrated test database.
 
 Remote integration (real Supabase signup/login/email delivery and real Neon
-migration/query execution) is **not verified** without credentials. See the
-completion report for the implemented / locally verified / pending split.
+migration/query execution) is **not verified** without credentials. See
+`docs/PROFILES.md` and the completion report for the implemented / locally
+verified / pending split.

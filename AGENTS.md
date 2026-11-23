@@ -18,7 +18,7 @@ You are working on a premium Instagram-inspired social application. Follow these
 2. Never overwrite unrelated files or existing user work outside this repository.
 3. Ask before adding a dependency that is not part of the approved stack: Next.js App Router, TypeScript, Tailwind CSS, shadcn/ui, Lucide, Neon PostgreSQL, Supabase Auth/Storage/Realtime, Drizzle ORM, Zod.
 
-Current state: Blocks 1–4 are complete. Block 5 (feed/posts) is next; do not add social features here. Backend details and credential requirements live in `docs/BACKEND.md`.
+Current state: Blocks 1–5 are complete. Block 5 delivered real profiles, follow/unfollow, follower/following lists, counts, and a bounded user-search foundation. Block 6 (feed/posts) is next; do not start it in this block. Backend details and credential requirements live in `docs/BACKEND.md`; Block 5 specifics live in `docs/PROFILES.md`.
 
 ## Architecture
 

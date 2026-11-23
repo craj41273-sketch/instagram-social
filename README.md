@@ -1,6 +1,6 @@
 # Luma
 
-Premium, dark-first photo-sharing experience built on Next.js. **Blocks 1–4 are complete:** project foundation, design system, landing page, authentication UI, and a real backend foundation (Neon/Drizzle + Supabase Auth). Social features begin in Block 5. No uploads or social features are connected yet.
+Premium, dark-first photo-sharing experience built on Next.js. **Blocks 1–5 are complete:** project foundation, design system, landing page, authentication UI, backend foundation, and real user profiles with a secure follow graph. Block 6 (feed/posts) is next. Uploads and post content are not implemented yet.
 
 ## Stack
 
@@ -54,9 +54,13 @@ Open <http://localhost:3000>. Every route — the landing page, design system, a
 | `/login`, `/signup` | Real Supabase-backed authentication forms with shared Zod validation |
 | `/forgot-password`, `/reset-password`, `/verify-email` | Real recovery/verification flows; no simulated success |
 | `/auth/callback`, `/auth/confirm` | Supabase PKCE and OTP confirmation endpoints |
+| `/profile/[username]` | Public profile with real counts, follow/edit actions, and empty content tabs |
+| `/profile/[username]/followers`, `/following` | Cursor-paginated social graph lists |
+| `/profile/edit` | Authenticated, owner-only profile editor |
+| `/api/users/search` | Authenticated, rate-limited username lookup foundation |
 | `/privacy`, `/terms`, `/contact` | Honest placeholder pages so footer links resolve |
 
-> **Credential status:** all auth routes are implemented locally; real signup, email delivery, and Neon queries require the values in `.env.local`. Google sign-in remains disabled because it is outside this block. See [`docs/BACKEND.md`](docs/BACKEND.md).
+> **Credential status:** all auth and profile routes are implemented locally; real signup, profile queries, follow mutations, and email delivery require the values in `.env.local`. No remote migration was applied from this environment. See [`docs/BACKEND.md`](docs/BACKEND.md) and [`docs/PROFILES.md`](docs/PROFILES.md).
 
 > **Platform note:** `dev` and `build` deliberately pass `--webpack`. This project was initialized on Android/arm64, where Turbopack native bindings are unavailable. On a supported machine you may remove the flag.
 
@@ -91,7 +95,9 @@ Copy `.env.example` to `.env.local` and fill in real values. `.env*` files are i
 ```text
 app/(site)/           Marketing shell: landing, design system, policy pages
 app/(auth)/           Focused shell: login, signup, recovery, verification
-app/actions/          Authentication server actions
+app/(social)/         Public profiles, owner editor, follower/following lists
+app/actions/          Authentication, profile, and follow server actions
+app/api/users/search  Authenticated username lookup foundation
 app/auth/             Supabase callback and OTP confirmation handlers
 app/                  Root providers, global styles, error/loading/not-found
 proxy.ts              Next.js 16 session refresh and auth-only redirects
@@ -100,8 +106,11 @@ components/auth/      Auth shell, wrappers, fields, and client form logic
 components/ui/        shadcn/ui primitives + app-wide wrappers
 components/layout/    Header, footer, page container, info-page template
 components/shared/    Brand, theme, states, media, identity components
+components/profile/   Profile header, avatar, stats, tabs, lists, forms, actions
 lib/auth/             Supabase clients, DAL, identity mapping, constants
-lib/db/               Drizzle client, foundational schema, identity SQL
+lib/db/               Drizzle client, schema, profile/follow ops, parameterized SQL
+lib/profile/          Profile action state, display helpers, list loading
+lib/pagination.ts     Bounded cursors for social graph lists
 lib/env/              Validated public/server-only environment access
 lib/security/         Rate-limit preparation and safe redirect helpers
 lib/storage/          Planned bucket names and storage boundary
@@ -113,7 +122,7 @@ drizzle/              Generated migrations
 tests/                Backend tests and the local TS resolve hook
 hooks/                Shared React hooks
 types/                Shared TypeScript types
-docs/                 Architecture, backend, coding standards, design system
+docs/                 Architecture, backend, profiles, coding standards, design system
 public/               Static assets
 ```
 
@@ -131,6 +140,7 @@ public/               Static assets
 - [x] Frontend authentication UI with shared validation and real action states
 - [x] Real Supabase Auth flows, session handling, and server-derived identity mapping
 - [x] Foundational Neon schema, generated migrations, and backend tests
+- [x] Real profiles, follow/unfollow, DB-backed counts, follower/following lists, and bounded user lookup
 - [x] Typecheck, lint, build, and dev server verification
 - [ ] Remote Neon/Supabase integration verified with real credentials (deployment step)
-- [ ] Posts, feed, likes, comments, follows, stories, messaging, notifications, search, explore (later blocks)
+- [ ] Posts, feed, likes, comments, stories, messaging, notifications, explore, recommendations (later blocks)

@@ -92,12 +92,13 @@ Tailwind defaults (`sm`, `md`, `lg`, `xl`, `2xl`) plus custom `3xl` (`96rem`) fo
 | ErrorState | `components/shared/error-state.tsx` | `role="alert"`, title, description, action |
 | ThemeToggle | `components/shared/theme-toggle.tsx` | Toggles optional light mode; dark is default |
 
-## Landing and auth layers
+## Landing, auth, and profile layers
 
 Route groups give each surface its own shell without changing URLs:
 
 - `app/(site)/layout.tsx` — marketing navigation + full footer for `/`, `/design-system`, and policy pages.
 - `app/(auth)/layout.tsx` — focused `AuthShell` for login, signup, and recovery pages.
+- `app/(social)/layout.tsx` — lightweight profile shell with brand, theme toggle, and mobile-first content column.
 
 ### Landing components
 
@@ -123,6 +124,20 @@ Route groups give each surface its own shell without changing URLs:
 | AuthDivider | `components/auth/auth-divider.tsx` | Decorative separator |
 | SocialLoginButton | `components/auth/social-login-button.tsx` | Disabled Google boundary with pending-setup label |
 | Auth forms | `components/auth/forms/` | Zod-validated forms wired to real Supabase Auth server actions |
+
+### Profile components
+
+| Component | File | Notes |
+| --- | --- | --- |
+| ProfileAvatar | `components/profile/profile-avatar.tsx` | Safe HTTP(S) image or gradient/initials fallback |
+| ProfileHeader | `components/profile/profile-header.tsx` | Cover, identity, bio, metadata, actions, stats |
+| ProfileStats | `components/profile/profile-stats.tsx` | DB-backed counts; honest posts placeholder |
+| FollowButton | `components/profile/follow-button.tsx` | DB-derived state, two-step unfollow, loading/error states |
+| ProfileTabs | `components/profile/profile-tabs.tsx` | Empty Posts/Tagged states; no simulated content |
+| UserList | `components/profile/user-list.tsx` | Reusable follower/following rows with status actions |
+| EditProfileForm | `components/profile/edit-profile-form.tsx` | Owner form with validation, save, cancel, success/error states |
+| ProfileSkeleton | `components/profile/profile-skeleton.tsx` | Loading states for profile and list routes |
+| SocialListView | `components/profile/social-list-view.tsx` | Cursor-ready list shell with empty/error states |
 
 All landing photography is centralized in `lib/media.ts` and currently points to stable Unsplash CDN IDs. Images are rendered unoptimized because the local arm64 runtime cannot load the native image optimizer; replace the URLs with owned assets when available.
 

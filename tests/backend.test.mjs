@@ -35,7 +35,7 @@ test("email and password validation", () => {
   assert.equal(passwordSchema.safeParse("longenough1").success, true);
 });
 
-test("foundational schema contains only users and profiles with expected columns", () => {
+test("foundational users and profiles retain expected columns", () => {
   const userConfig = getTableConfig(users);
   const profileConfig = getTableConfig(profiles);
 
@@ -55,6 +55,7 @@ test("foundational schema contains only users and profiles with expected columns
       "created_at",
       "display_name",
       "id",
+      "location",
       "updated_at",
       "user_id",
       "website",

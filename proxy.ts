@@ -4,7 +4,7 @@ import {
   AUTH_ONLY_ROUTES,
   AUTHENTICATED_HOME,
   LOGIN_ROUTE,
-  PROTECTED_ROUTE_PREFIXES,
+  isProtectedRoute,
 } from "@/lib/auth/constants";
 import { getOptionalSupabasePublicEnv } from "@/lib/env";
 
@@ -46,7 +46,7 @@ export async function proxy(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
 
-  if (!user && PROTECTED_ROUTE_PREFIXES.some((prefix) => path.startsWith(prefix))) {
+  if (!user && isProtectedRoute(path)) {
     const url = new URL(LOGIN_ROUTE, request.url);
     url.searchParams.set("next", path);
     return NextResponse.redirect(url);

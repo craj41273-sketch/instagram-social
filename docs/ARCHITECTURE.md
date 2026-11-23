@@ -13,7 +13,7 @@
 | Layer | Location | Responsibility | May depend on |
 | --- | --- | --- | --- |
 | UI / routes | `app/`, `components/` | Render markup, collect intent | Application, shared types, UI primitives |
-| Application | `app/actions/auth.ts`, `lib/` services | Orchestrate use cases, validation, safe errors | Data access, infrastructure |
+| Application | `app/actions/`, `lib/` services | Orchestrate use cases, validation, safe errors | Data access, infrastructure |
 | Data access | `lib/db/` | Drizzle schema, parameterized queries, idempotent SQL | Infrastructure config |
 | Infrastructure | `lib/auth/`, `lib/env/`, `lib/security/`, `lib/storage/`, Supabase clients | External services, configuration, guardrails | Nothing from UI |
 | Shared | `lib/utils.ts`, `lib/constants.ts`, `lib/errors.ts`, `lib/logging.ts`, `types/` | Cross-cutting pure/server utility code | Nothing |
@@ -41,7 +41,9 @@ receive serializable props.
 ```text
 app/(site)/           Marketing route group: landing, design system, policy pages
 app/(auth)/           Auth route group: login, signup, recovery, verification
-app/actions/          Authentication server actions
+app/(social)/         Public profiles, owner editor, follower/following lists
+app/actions/          Authentication, profile, and follow server actions
+app/api/users/search  Authenticated username lookup foundation
 app/auth/             Supabase PKCE callback and OTP confirmation handlers
 app/                  Root providers, global styles, loading/error/not-found
 proxy.ts              Next.js 16 session refresh and optimistic redirects
@@ -52,7 +54,9 @@ components/layout/    Persistent shell: header, footer, page container
 components/shared/    Reusable branded/composite components
 lib/media.ts          Replaceable landing photography sources
 lib/auth/             Supabase clients, DAL, identity mapping, constants
-lib/db/               Drizzle client (`getDb`), schema, parameterized identity SQL
+lib/db/               Drizzle client (`getDb`), schema, profile/follow ops, parameterized SQL
+lib/profile/          Profile action state, display helpers, social list loading
+lib/pagination.ts     Bounded keyset cursors for social graph lists
 lib/env/              Public and server-only env schemas + getters
 lib/security/         Rate-limit preparation and safe redirect helpers
 lib/storage/          Planned storage buckets and storage client boundary
@@ -82,10 +86,11 @@ The UI layer is backed by a documented design system (`docs/DESIGN_SYSTEM.md`):
 
 ## Domain plan
 
-Block 4 implements only `users` and `profiles` in `lib/db/schema.ts`, with the
-generated migration in `drizzle/`. Later blocks will add domain tables
-incrementally: `posts`, `post_media`, `likes`, `comments`, `follows`, `stories`,
-`story_views`, `conversations`, `messages`, `notifications`, and `saved_posts`.
+Block 4 implemented `users` and `profiles`; Block 5 added profile `location`
+and the constrained `follows` table, with additive migrations in `drizzle/`.
+Block 6 and later will add domain tables incrementally: `posts`, `post_media`,
+`likes`, `comments`, `stories`, `story_views`, `conversations`, `messages`,
+`notifications`, and `saved_posts`.
 
 Neon is the only application database. Supabase Auth owns identity; its own
 Postgres is not used as a second app database. Application-level authorization
