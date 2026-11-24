@@ -1,13 +1,14 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Grid3X3, Images } from "lucide-react";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-/** Honest placeholders: no posts or tagged media exist until a later block. */
-export function ProfileTabs() {
+/** Posts come from Neon; tagged media stays honestly empty until tagging exists. */
+export function ProfileTabs({ posts }: { posts: ReactNode }) {
   return (
-    <Tabs defaultValue="posts" className="gap-5">
+    <Tabs defaultValue="posts" className="gap-5" id="posts">
       <TabsList variant="line" className="w-full justify-center rounded-none border-b border-border/70">
         <TabsTrigger value="posts">
           <Grid3X3 aria-hidden="true" />
@@ -19,13 +20,7 @@ export function ProfileTabs() {
         </TabsTrigger>
       </TabsList>
 
-      <TabsContent value="posts">
-        <EmptyState
-          icon={Grid3X3}
-          title="Posts will appear here"
-          description="Sharing is coming in a later block. Nothing is being simulated in this release."
-        />
-      </TabsContent>
+      <TabsContent value="posts">{posts}</TabsContent>
 
       <TabsContent value="tagged">
         <EmptyState

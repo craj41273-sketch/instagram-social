@@ -1,5 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
+import type { ProfileImageKind } from "@/lib/storage/paths";
 import { editProfileSchema, type EditProfileValues } from "@/lib/validations/profile";
 
 /**
@@ -36,6 +37,22 @@ export function buildUpdateProfileStatement(
     FROM "updated_user" AS u
     WHERE p."user_id" = u."id"
     RETURNING p."id" AS profile_id, p."user_id" AS user_id, u."username" AS username
+  `;
+}
+
+/** Updates only the selected image column using a fixed, trusted identifier. */
+export function buildUpdateProfileImageStatement(
+  userId: string,
+  kind: ProfileImageKind,
+  url: string,
+): SQL {
+  const column = kind === "avatar" ? sql`"avatar_url"` : sql`"cover_url"`;
+
+  return sql`
+    UPDATE "profiles"
+    SET ${column} = ${url}, "updated_at" = now()
+    WHERE "user_id" = ${userId}
+    RETURNING "id" AS profile_id, "user_id" AS user_id
   `;
 }
 

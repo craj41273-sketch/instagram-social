@@ -3,15 +3,27 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { PgDialect, getTableConfig } from "drizzle-orm/pg-core";
 
-import { follows, profiles, users } from "@/lib/db/schema.ts";
+import {
+  follows,
+  postHashtags,
+  postMedia,
+  posts,
+  profiles,
+  users,
+} from "@/lib/db/schema.ts";
 import {
   buildFollowPageCondition,
   buildFollowPageOrder,
 } from "@/lib/db/follow-query.ts";
 import {
+  buildPostPageCondition,
+  buildPostPageOrder,
+} from "@/lib/db/post-query.ts";
+import {
+  buildUpdateProfileImageStatement,
   buildUpdateProfileStatement,
   parseUserId,
 } from "@/lib/db/profile-sql.ts";
@@ -22,14 +34,32 @@ import {
 import {
   decodeFollowCursor,
   encodeFollowCursor,
+  decodePageCursor,
+  encodePageCursor,
   parseListLimit,
 } from "@/lib/pagination.ts";
+import { extractHashtags } from "@/lib/posts/hashtags.ts";
 import { profileInitials, safeHttpUrl } from "@/lib/profile/format.ts";
+import {
+  assertImageBytes,
+  detectImageMime,
+  validateImageMetadata,
+} from "@/lib/storage/image-validation.ts";
+import {
+  buildPostMediaPath,
+  buildProfileImagePath,
+  storageObjectKey,
+  storagePathOwner,
+} from "@/lib/storage/paths.ts";
 import {
   editProfileSchema,
   followActionSchema,
   userSearchQuerySchema,
 } from "@/lib/validations/profile.ts";
+import {
+  createPostInputSchema,
+  editPostSchema,
+} from "@/lib/validations/post.ts";
 
 const ownerId = "11111111-1111-4111-8111-111111111111";
 const targetId = "22222222-2222-4222-8222-222222222222";
@@ -243,6 +273,186 @@ test("public profiles stay public while edit is optimistically protected", () =>
   assert.equal(isProtectedRoute("/profile/editor"), false);
   assert.equal(isProtectedRoute("/profile/alice"), false);
   assert.equal(isProtectedRoute("/profile/alice/followers"), false);
+});
+
+test("posts and media tables enforce ownership, cascade deletes, and stable order", () => {
+  const postConfig = getTableConfig(posts);
+  const mediaConfig = getTableConfig(postMedia);
+  const tagConfig = getTableConfig(postHashtags);
+
+  assert.equal(postConfig.name, "posts");
+  assert.ok(postConfig.columns.some((column) => column.name === "caption"));
+  assert.ok(postConfig.checks.some((item) => item.name === "posts_caption_length_check"));
+  assert.equal(postConfig.foreignKeys.length, 1);
+  assert.equal(postConfig.foreignKeys[0].onDelete, "cascade");
+  assert.ok(postConfig.indexes.some((item) => item.config.name === "posts_user_created_idx"));
+
+  assert.equal(mediaConfig.name, "post_media");
+  assert.deepEqual(
+    mediaConfig.columns.map((column) => column.name).sort(),
+    [
+      "alt_text",
+      "byte_size",
+      "created_at",
+      "height",
+      "id",
+      "mime_type",
+      "position",
+      "post_id",
+      "public_url",
+      "storage_path",
+      "width",
+    ],
+  );
+  assert.equal(mediaConfig.foreignKeys[0].onDelete, "cascade");
+  const mediaIndexes = new Map(mediaConfig.indexes.map((item) => [item.config.name, item.config]));
+  assert.equal(mediaIndexes.get("post_media_storage_path_unique")?.unique, true);
+  assert.deepEqual(
+    mediaIndexes.get("post_media_post_position_unique")?.columns.map((column) => column.name),
+    ["post_id", "position"],
+  );
+  assert.equal(mediaIndexes.get("post_media_post_position_unique")?.unique, true);
+  assert.ok(mediaConfig.checks.some((item) => item.name === "post_media_position_check"));
+  assert.ok(mediaConfig.checks.some((item) => item.name === "post_media_byte_size_check"));
+
+  assert.equal(tagConfig.name, "post_hashtags");
+  assert.equal(tagConfig.foreignKeys[0].onDelete, "cascade");
+  assert.ok(tagConfig.checks.some((item) => item.name === "post_hashtags_tag_format_check"));
+});
+
+test("post feed validation rejects client-supplied ownership and oversized media", () => {
+  const created = createPostInputSchema.parse({
+    caption: "  Sunset #Photo  ",
+    userId: ownerId,
+    authorId: ownerId,
+    media: [
+      {
+        storagePath: `${ownerId}/posts/post.jpg`,
+        publicUrl: "https://example.supabase.co/storage/v1/object/public/post-media/post.jpg",
+        mimeType: "image/jpeg",
+        byteSize: 1024,
+        position: 0,
+      },
+    ],
+  });
+
+  assert.equal(created.caption, "Sunset #Photo");
+  assert.equal(Object.hasOwn(created, "userId"), false);
+  assert.equal(Object.hasOwn(created, "authorId"), false);
+
+  assert.equal(
+    createPostInputSchema.safeParse({ caption: "x", media: [] }).success,
+    false,
+  );
+  assert.equal(
+    createPostInputSchema.safeParse({
+      caption: "x",
+      media: [
+        {
+          storagePath: "a/b.jpg",
+          publicUrl: "http://insecure.example/b.jpg",
+          mimeType: "image/jpeg",
+          byteSize: 1,
+          position: 0,
+        },
+      ],
+    }).success,
+    false,
+  );
+  assert.equal(editPostSchema.safeParse({ postId: "bad", caption: "x" }).success, false);
+});
+
+test("hashtags are normalized, bounded, and deduplicated", () => {
+  assert.deepEqual(
+    extractHashtags("Hello #Sunset and #sunset, then #Luma_2026! #a #b #c #d #e #f #g #h #i #j #k"),
+    ["sunset", "luma_2026", "a", "b", "c", "d", "e", "f", "g", "h"],
+  );
+  assert.deepEqual(extractHashtags("email me at a@b.com #nope%"), []);
+});
+
+test("image validation checks declared type, magic bytes, and size", () => {
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2]);
+  assert.equal(detectImageMime(png), "image/png");
+  assert.equal(detectImageMime(new Uint8Array([1, 2, 3])), null);
+  assert.throws(
+    () => assertImageBytes(png, "image/jpeg", 10),
+    /do not match/,
+  );
+  assert.throws(
+    () => validateImageMetadata({ name: "a.png", type: "text/html", size: 10 }, 100),
+    /JPEG, PNG, WebP, or GIF/,
+  );
+  assert.throws(
+    () => validateImageMetadata({ name: "a.png", type: "image/png", size: 101 }, 100),
+    /size limit/,
+  );
+  const valid = validateImageMetadata({ name: "a.png", type: "image/png", size: 10 }, 100);
+  assert.equal(valid.extension, "png");
+});
+
+test("storage paths stay inside the authenticated owner prefix", () => {
+  assert.equal(storageObjectKey(["/alice/..//b/", "c.jpg"]), "alice/b/c.jpg");
+  assert.equal(buildProfileImagePath(ownerId, "avatar"), `${ownerId}/profile/avatar`);
+  assert.equal(buildProfileImagePath(ownerId, "cover"), `${ownerId}/profile/cover`);
+  const mediaPath = buildPostMediaPath(ownerId, targetId, 2, "abc", "png");
+  assert.equal(mediaPath, `${ownerId}/posts/${targetId}/2-abc.png`);
+  assert.equal(storagePathOwner(mediaPath), ownerId);
+});
+
+test("post cursors keep full timestamp precision and bind tag filters", () => {
+  const cursor = { createdAt: "2026-11-23T10:00:00.123456Z", id: targetId };
+  assert.deepEqual(decodePageCursor(encodePageCursor(cursor)), cursor);
+
+  const dialect = new PgDialect();
+  const condition = dialect.sqlToQuery(buildPostPageCondition(sql`true`, cursor, "sunset"));
+  assert.equal(condition.sql.includes("sunset"), false);
+  assert.deepEqual(condition.params, [
+    "sunset",
+    cursor.createdAt,
+    cursor.createdAt,
+    cursor.id,
+  ]);
+  assert.match(condition.sql, /post_hashtags/);
+  const order = dialect.sqlToQuery(buildPostPageOrder());
+  assert.match(order.sql, /"posts"."created_at" desc/);
+  assert.match(order.sql, /"posts"."id" desc/);
+});
+
+test("profile image updates are owner-scoped and fully parameterized", () => {
+  const avatar = new PgDialect().sqlToQuery(
+    buildUpdateProfileImageStatement(ownerId, "avatar", "https://cdn.example/a.png"),
+  );
+  const cover = new PgDialect().sqlToQuery(
+    buildUpdateProfileImageStatement(ownerId, "cover", "https://cdn.example/c.png"),
+  );
+
+  assert.match(avatar.sql, /"avatar_url"/);
+  assert.doesNotMatch(avatar.sql, /"cover_url"/);
+  assert.deepEqual(avatar.params, ["https://cdn.example/a.png", ownerId]);
+  assert.match(cover.sql, /"cover_url"/);
+  assert.equal(avatar.sql.includes("https://cdn.example/a.png"), false);
+});
+
+test("media migrations are additive and contain ownership constraints", () => {
+  const postMigration = readFileSync(
+    new URL("../drizzle/0002_posts_media.sql", import.meta.url),
+    "utf8",
+  );
+  const tagMigration = readFileSync(
+    new URL("../drizzle/0003_post_hashtags.sql", import.meta.url),
+    "utf8",
+  );
+
+  for (const migration of [postMigration, tagMigration]) {
+    assert.doesNotMatch(migration, /DROP TABLE|TRUNCATE|DELETE FROM/i);
+  }
+  assert.match(postMigration, /CREATE TABLE "posts"/);
+  assert.match(postMigration, /CREATE TABLE "post_media"/);
+  assert.match(postMigration, /posts_user_id_users_id_fk.*ON DELETE cascade/s);
+  assert.match(postMigration, /post_media_post_id_posts_id_fk.*ON DELETE cascade/s);
+  assert.match(postMigration, /CREATE UNIQUE INDEX "post_media_post_position_unique"/);
+  assert.match(tagMigration, /CREATE TABLE "post_hashtags"/);
+  assert.match(tagMigration, /post_hashtags_post_tag_unique/);
 });
 
 const integrationEnabled = Boolean(

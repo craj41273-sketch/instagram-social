@@ -1,18 +1,17 @@
-# Profiles and social graph (Block 5)
+# Profiles and social graph (Block 5, expanded)
 
-Block 5 adds real public profiles and a secure directed social graph on the
-existing Next.js 16 / Neon / Drizzle / Supabase foundation. Blocks 1–4 are
-preserved; no posts, feed, likes, stories, messaging, notifications, Explore,
-or recommendations were added.
+Block 5 provides real public profiles, a secure directed social graph, validated
+avatar/cover uploads, a database-backed post grid/count, social dialogs, and
+suggested accounts. Blocks 1–4 are preserved. Likes, comments, stories,
+messaging, and notifications remain out of scope.
 
 ## Username authority
 
 `users.username` is the **single authoritative username source**. It is stored
 lowercase by the shared Zod schema and protected by a unique constraint plus a
 case-insensitive `lower(username)` index. `profiles` has no duplicate username
-column. Profile links, lookup, search, and edits all resolve through this one
-field. Changing a username updates `users.username` and the profile in one
-parameterized SQL statement.
+column. Profile links, lookup, search, edits, follow actions, and storage paths
+resolve through session-derived IDs or this one field.
 
 ## Schema
 
@@ -24,125 +23,154 @@ profiles (existing + location)
   id, user_id -> users.id (unique, cascade), display_name,
   bio, avatar_url, cover_url, website, location, created_at, updated_at
 
-follows (new)
+follows (Block 5)
   id uuid PK default gen_random_uuid()
   follower_id   -> users.id ON DELETE CASCADE
   following_id  -> users.id ON DELETE CASCADE
   created_at timestamptz default now()
   UNIQUE (follower_id, following_id)
-  INDEX (follower_id)
-  INDEX (following_id)
-  INDEX (created_at)
+  INDEX (follower_id), INDEX (following_id), INDEX (created_at)
   CHECK (follower_id <> following_id)
+
+posts (Block 5 grid foundation; completed in Block 6)
+  id uuid PK, user_id -> users.id ON DELETE CASCADE,
+  caption text, created_at, updated_at
+  INDEX (user_id), INDEX (user_id, created_at), INDEX (created_at)
+  CHECK (length(caption) <= 2200)
+
+post_media (metadata only)
+  id uuid PK, post_id -> posts.id ON DELETE CASCADE,
+  storage_path text UNIQUE, public_url text, mime_type text,
+  byte_size int, width int, height int, alt_text text,
+  position int, created_at
+  UNIQUE (post_id, position)
+  CHECK (position >= 0), CHECK (byte_size > 0)
+
+post_hashtags
+  id uuid PK, post_id -> posts.id ON DELETE CASCADE,
+  tag text, position int, created_at
+  UNIQUE (post_id, tag), UNIQUE (post_id, position), INDEX (tag)
+  CHECK (tag ~ '^[a-z0-9_]{1,30}$')
 ```
 
-The follow edge means “`follower_id` follows `following_id`”. Both sides point
-to application user UUIDs, never Supabase auth IDs. Uniqueness prevents
-duplicate edges, the check constraint prevents self-follows even if application
-validation is bypassed, and cascades keep the graph consistent when a user is
-deleted.
+Migrations are additive:
 
-Migration: `drizzle/0001_high_quentin_quire.sql`. It only creates `follows` and
-adds the nullable `location` column; the Block 4 migration
-`drizzle/0000_nosy_zaran.sql` is untouched. No database was reset and no remote
-migration was applied from this environment.
+- `drizzle/0001_high_quentin_quire.sql` — follows + profile location.
+- `drizzle/0002_posts_media.sql` — posts + post_media metadata.
+- `drizzle/0003_post_hashtags.sql` — normalized hashtag metadata.
 
-### Applying migrations
-
-With real credentials in `.env.local`:
-
-```bash
-npm run db:generate # only when schema changes; no connection needed
-npm run db:migrate  # applies pending generated migrations to Neon
-```
-
-Review generated SQL before applying. `db:push` is not part of the safe
-migration workflow.
+No remote migration was applied from this environment. Apply with
+`npm run db:migrate` after reviewing generated SQL with real credentials.
+`db:push` is not part of the safe migration workflow.
 
 ## Routes
 
 | Route | Access | Purpose |
 | --- | --- | --- |
-| `/profile/[username]` | Public | Profile header, DB-backed counts, follow/edit action, Posts/Tagged empty states |
-| `/profile/[username]/followers` | Public | Cursor-paginated follower list with follow status/actions |
-| `/profile/[username]/following` | Public | Cursor-paginated following list with follow status/actions |
-| `/profile/edit` | Authenticated owner | Edit display name, username, bio, website, location |
-| `/api/users/search?q=…` | Authenticated | Bounded, rate-limited username prefix lookup foundation |
+| `/profile/[username]` | Public | Header, DB-backed counts, follow/edit action, real post grid, dialogs, suggestions |
+| `/profile/[username]/followers` | Public | Cursor-paginated fallback page for follower list |
+| `/profile/[username]/following` | Public | Cursor-paginated fallback page for following list |
+| `/profile/edit` | Authenticated owner | Avatar/cover uploads plus public detail editing |
+| `/api/users/search?q=…` | Authenticated | Bounded, rate-limited username prefix lookup |
+| `/posts`, `/post/[postId]` | Public | Completed in Block 6 |
 
 Public profiles remain reachable without a Supabase session. `proxy.ts`
-performs optimistic protection for `/profile/edit` using exact-or-child
-matching, so a username such as `editor` is not accidentally protected. The DAL
-rechecks the verified session on the server; `proxy.ts` is never the only
-authorization boundary.
+performs optimistic protection for `/profile/edit` with exact-or-child matching;
+the DAL rechecks the verified session in every action and protected route.
 
-Loading and not-found states exist for profile, follower, following, and edit
-routes. Data failures render `ErrorState` with a retry link rather than an
-invented empty result.
+Loading, not-found, empty, and failure states are explicit. Data failures render
+`ErrorState` with a retry link rather than an invented empty result.
 
 ## Server operations
 
-Reusable server-only modules:
+- `lib/db/profiles.ts`: public profile lookups, username availability, owner
+  profile update, and `updateProfileImage` for avatar/cover URLs.
+- `lib/db/follows.ts`: follow/unfollow, viewer status, counts, and cursor lists.
+- `lib/db/users.ts`: bounded search and real suggested users excluding the
+  viewer and accounts they already follow.
+- `lib/db/posts.ts`: post count, profile grid, detail/feed projections,
+  owner-scoped mutation helpers, and media/hashtag metadata inserts.
+- `lib/db/post-query.ts`: keyset order/predicate helpers that bind full-precision
+  PostgreSQL timestamps and parameterized hashtag filters.
+- `lib/pagination.ts`: opaque cursor helpers and bounded page sizes.
+- `lib/storage/image-validation.ts`: MIME allowlist, byte-size limits, and magic
+  byte sniffing. No browser value is trusted.
+- `lib/storage/paths.ts`: owner-namespaced object keys with traversal stripping.
+- `lib/storage/upload.ts`: server-only Supabase Storage upload/remove helpers.
 
-- `lib/db/profiles.ts`: `getPublicProfileByUsername`, `getPublicProfileByUserId`,
-  `isUsernameAvailableForUser`, `updateOwnProfile`
-- `lib/db/follows.ts`: `followUser`, `unfollowUser`, `isFollowing`,
-  `getFollowCounts`, `listFollowers`, `listFollowing`
-- `lib/db/follow-query.ts`: keyset order/predicate helpers that bind the exact
-  microsecond timestamp from PostgreSQL into follow cursors
-- `lib/db/users.ts`: `findUserById`, `searchUsersByUsername`
-- `lib/db/profile-sql.ts`: parameterized atomic profile update statement
-- `lib/pagination.ts`: opaque cursor encode/decode and bounded page size
-
-Follower/following pages use keyset cursors built from `created_at` and the
-follow row UUID. Each page performs one list query plus one batched status
-query for the viewer; there is no per-row N+1 lookup. Counts come from indexed
-scalar subqueries, not constants.
+Follower/following and post pages use keyset cursors from `created_at` plus the
+row UUID. Full microsecond timestamps are preserved so same-millisecond rows
+are not skipped. Counts come from indexed scalar queries, not constants.
 
 ## Actions and ownership
 
 - `app/actions/profile.ts` derives the owner from `getCurrentProfile()`. It
-  accepts no user ID, profile ID, or target username from the client. A changing
-  username is checked for availability, then both tables are updated atomically.
-- `app/actions/follows.ts` derives the follower from the session. The only
-  client inputs are a validated target username and an intent. It rejects
-  self-follows, validates the target, rate-limits mutations, and revalidates
-  affected profile/list paths.
-- Unfollow deletes only `(viewer, target)` and is idempotent: a repeated delete
-  is a successful no-op.
-- Follow status is read from `follows`; the UI never treats a local toggle as
-  source of truth.
+  accepts no user ID, profile ID, or target username.
+- `app/actions/profile-media.ts` derives both the database owner and the storage
+  prefix from the verified session. The client sends only `kind` and `image`.
+- `app/actions/follows.ts` derives the follower from the session. The client
+  sends only a validated target username and intent. Self-follows are rejected
+  and duplicate follows are absorbed by the database unique constraint.
+- `app/actions/social.ts` loads additional public follow pages for dialogs.
+- Follow buttons use `useOptimistic` for instant feedback; the server result is
+  the source of truth and failures restore the confirmed state.
+
+## Storage configuration
+
+Buckets must be created before uploads work:
+
+```sql
+insert into storage.buckets (id, name, public)
+values ('avatars', 'avatars', true), ('post-media', 'post-media', true)
+on conflict (id) do nothing;
+```
+
+Paths begin with the Supabase auth user UUID:
+`<auth_user_id>/profile/avatar`, `<auth_user_id>/profile/cover`, and
+`<auth_user_id>/posts/<post_id>/...`. Public read is required for profile images;
+write policies must restrict the first path segment to `auth.uid()`:
+
+```sql
+create policy "owners manage own avatar objects"
+on storage.objects for all to authenticated
+using (
+  bucket_id = 'avatars'
+  and (storage.foldername(name))[1] = auth.uid()::text
+)
+with check (
+  bucket_id = 'avatars'
+  and (storage.foldername(name))[1] = auth.uid()::text
+);
+```
+
+Use the same policy for `post-media`, with public `select` for rendered media.
+The app uploads through the request-scoped Supabase client, so RLS still applies;
+the service-role key is not used for uploads.
 
 ## Security notes
 
-- All mutable inputs pass through Zod schemas in `lib/validations/profile.ts`.
-- Database constraints back validation for uniqueness, self-follows, and
-  referential integrity.
+- Mutable inputs pass through Zod in `lib/validations/profile.ts` and
+  `lib/validations/post.ts`.
+- Database constraints back validation for uniqueness, self-follows, caption
+  size, media order, and referential integrity.
 - SQL values are parameterized; identifiers are fixed schema constants.
-- Only safe public fields are selected for profile/search projections: no
-  email, auth user ID, tokens, or service-role configuration.
-- Sensitive operations use the existing in-process rate limiter. A shared store
-  is still required for multi-instance production deployments.
-- `SUPABASE_SERVICE_ROLE_KEY` remains confined to the existing admin client
-  boundary and is not used by Block 5.
-- Uploads are not implemented. `avatar_url` and `cover_url` are rendered only
-  for absolute HTTP(S) values; otherwise a polished fallback is shown.
+- Public projections never include email, auth IDs, tokens, or service config.
+- Uploads are limited to JPEG/PNG/WebP/GIF with server-side magic-byte checks.
+- Object keys are namespaced by the verified auth user and stripped of `..`.
+- Sensitive operations use the existing in-process rate limiter; a shared store
+  is required for multi-instance production.
 
 ## Tests and limitations
 
-`npm test` runs structural tests for schema constraints, validation, SQL
-parameterization, cursors, migration safety, route protection, and safe display
-helpers. A real Neon integration test is included but skipped unless both
-`LUMA_DB_INTEGRATION=1` and `DATABASE_URL` are set against an already-migrated
-**test** database; it only creates and then removes its own uniquely named rows.
+`npm test` covers schema constraints, validation, SQL parameterization, cursors,
+storage path safety, image sniffing, hashtag normalization, migration safety,
+route protection, and safe display helpers. A real Neon integration test is
+skipped unless `LUMA_DB_INTEGRATION=1` and `DATABASE_URL` point to an
+already-migrated test database.
 
 Known limitations:
 
-- No remote Neon migration or live query was executed here; credentials are not
-  configured.
-- No real Supabase signup/login was executed, so authenticated browser flows
-  were not exercised end-to-end.
-- The rate limiter is in-memory and per process.
-- Supabase Storage buckets and upload policies are still unconfigured. Image
-  fields and rendering are ready; no upload is faked.
-- Posts/tagged tabs are intentionally honest empty states. Block 6 introduces
-  real media content.
+- No remote Neon migration or live authenticated browser flow was executed here.
+- Supabase buckets/policies must be created before real uploads work.
+- The in-memory rate limiter is per process.
+- Tagged media remains an honest empty state until tagging exists.

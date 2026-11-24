@@ -20,10 +20,4 @@ export async function createSupabaseStorageClient() {
   return supabase.storage;
 }
 
-/** Normalizes object keys so paths cannot escape a bucket prefix. */
-export function storageObjectKey(parts: string[]): string {
-  const safeParts = parts
-    .map((part) => part.replace(/^\/+|\/+$/g, "").replace(/\.\./g, ""))
-    .filter(Boolean);
-  return safeParts.join("/");
-}
+export { storageObjectKey } from "@/lib/storage/paths";

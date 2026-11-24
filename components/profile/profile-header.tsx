@@ -5,26 +5,35 @@ import { PremiumButton } from "@/components/ui/premium-button";
 import { FollowButton } from "@/components/profile/follow-button";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { ProfileStats } from "@/components/profile/profile-stats";
+import type { SocialUserPage } from "@/lib/db/follows";
 import type { PublicProfile } from "@/lib/db/profiles";
 import { safeHttpUrl } from "@/lib/profile/format";
 
 interface ProfileHeaderProps {
   profile: PublicProfile;
+  posts: number;
   followers: number;
   following: number;
   isFollowing: boolean;
   isOwner: boolean;
   viewerUsername: string | null;
+  initialFollowers: SocialUserPage;
+  initialFollowing: SocialUserPage;
+  listLimit: number;
 }
 
 /** Premium, photo-first public profile header using only real profile data. */
 export function ProfileHeader({
   profile,
+  posts,
   followers,
   following,
   isFollowing,
   isOwner,
   viewerUsername,
+  initialFollowers,
+  initialFollowing,
+  listLimit,
 }: ProfileHeaderProps) {
   const website = safeHttpUrl(profile.website);
   const joined = new Date(profile.createdAt).toLocaleDateString("en-US", {
@@ -115,8 +124,13 @@ export function ProfileHeader({
           <div className="lg:pb-1">
             <ProfileStats
               username={profile.username}
+              posts={posts}
               followers={followers}
               following={following}
+              initialFollowers={initialFollowers}
+              initialFollowing={initialFollowing}
+              viewerUsername={viewerUsername}
+              limit={listLimit}
             />
           </div>
         </div>

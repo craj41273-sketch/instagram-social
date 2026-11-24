@@ -131,10 +131,12 @@ Route groups give each surface its own shell without changing URLs:
 | --- | --- | --- |
 | ProfileAvatar | `components/profile/profile-avatar.tsx` | Safe HTTP(S) image or gradient/initials fallback |
 | ProfileHeader | `components/profile/profile-header.tsx` | Cover, identity, bio, metadata, actions, stats |
-| ProfileStats | `components/profile/profile-stats.tsx` | DB-backed counts; honest posts placeholder |
-| FollowButton | `components/profile/follow-button.tsx` | DB-derived state, two-step unfollow, loading/error states |
-| ProfileTabs | `components/profile/profile-tabs.tsx` | Empty Posts/Tagged states; no simulated content |
-| UserList | `components/profile/user-list.tsx` | Reusable follower/following rows with status actions |
+| ProfileStats | `components/profile/profile-stats.tsx` | DB-backed counts plus working follower/following dialogs |
+| FollowButton | `components/profile/follow-button.tsx` | DB-derived state, optimistic toggle, two-step unfollow, server-confirmed feedback |
+| ProfileTabs | `components/profile/profile-tabs.tsx` | Real Neon-backed posts plus honest tagged empty state |
+| ProfilePostsGrid | `components/profile/profile-posts-grid.tsx` | Responsive media grid with count badge and empty state |
+| ProfileMediaForms | `components/profile/profile-media-forms.tsx` | Owner avatar/cover previews and validated uploads |
+| UserList | `components/profile/user-list.tsx` | Reusable follower/following/suggestion rows with status actions |
 | EditProfileForm | `components/profile/edit-profile-form.tsx` | Owner form with validation, save, cancel, success/error states |
 | ProfileSkeleton | `components/profile/profile-skeleton.tsx` | Loading states for profile and list routes |
 | SocialListView | `components/profile/social-list-view.tsx` | Cursor-ready list shell with empty/error states |

@@ -1,0 +1,494 @@
+import "server-only";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { getDb } from "@/lib/db";
+import {
+  postHashtags,
+  postMedia,
+  posts,
+  type NewPostMedia,
+} from "@/lib/db/schema";
+import {
+  buildPostPageCondition,
+  buildPostPageOrder,
+  postCursorTimestamp,
+} from "@/lib/db/post-query";
+import { parseUserId } from "@/lib/db/profile-sql";
+import { DatabaseError, ValidationError } from "@/lib/errors";
+import { logServerError } from "@/lib/logging";
+import { decodePageCursor, encodePageCursor } from "@/lib/pagination";
+import { extractHashtags } from "@/lib/posts/hashtags";
+
+/** Safe projections for profile grids, feeds, and post detail pages. */
+
+export interface ProfilePostItem {
+  postId: string;
+  caption: string;
+  createdAt: string;
+  thumbnailUrl: string | null;
+  mediaCount: number;
+}
+
+export interface ProfilePostPage {
+  items: ProfilePostItem[];
+  nextCursor: string | null;
+}
+
+export interface PublicPostMedia {
+  id: string;
+  publicUrl: string;
+  mimeType: string;
+  byteSize: number;
+  width: number | null;
+  height: number | null;
+  altText: string | null;
+  position: number;
+}
+
+export interface PublicPostAuthor {
+  userId: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+}
+
+export interface PublicPost {
+  id: string;
+  author: PublicPostAuthor;
+  caption: string;
+  hashtags: string[];
+  createdAt: string;
+  updatedAt: string;
+  media: PublicPostMedia[];
+}
+
+export interface PublicPostPage {
+  items: PublicPost[];
+  nextCursor: string | null;
+}
+
+interface RawRow {
+  [key: string]: unknown;
+}
+
+function extractRows<T extends RawRow>(result: unknown): T[] {
+  if (Array.isArray(result)) return result as T[];
+  if (result && typeof result === "object" && "rows" in result) {
+    const rows = (result as { rows?: unknown }).rows;
+    return Array.isArray(rows) ? (rows as T[]) : [];
+  }
+  return [];
+}
+
+function toIso(value: unknown): string {
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "string") {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+  }
+  return new Date(0).toISOString();
+}
+
+function text(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function nullableText(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function numeric(value: unknown): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function safeLimit(value: number | undefined, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(24, Math.max(1, Math.floor(value ?? fallback)));
+}
+
+/** Counts real post rows for the profile stat. */
+export async function getPostCountByUserId(userId: string): Promise<number> {
+  if (!parseUserId(userId)) throw new ValidationError("Invalid account identity.");
+
+  try {
+    const result = await getDb().execute<{ count: number | string }>(sql`
+      SELECT count(*)::int AS count FROM "posts" WHERE "user_id" = ${userId}
+    `);
+    return numeric(extractRows<{ count: number | string }>(result)[0]?.count);
+  } catch (error) {
+    logServerError("db.getPostCountByUserId", error, { userId });
+    throw new DatabaseError();
+  }
+}
+
+/** First page of real posts for a public profile grid. */
+export async function listProfilePosts(
+  userId: string,
+  options: { limit?: number; cursor?: string | null } = {},
+): Promise<ProfilePostPage> {
+  if (!parseUserId(userId)) throw new ValidationError("Invalid account identity.");
+
+  const limit = safeLimit(options.limit, 12);
+  const cursor = decodePageCursor(options.cursor);
+  const condition = buildPostPageCondition(eq(posts.userId, userId), cursor);
+
+  try {
+    const result = await getDb().execute<RawRow>(sql`
+      SELECT
+        "posts"."id" AS post_id,
+        "posts"."caption" AS caption,
+        ${postCursorTimestamp} AS cursor,
+        (
+          SELECT pm."public_url" FROM "post_media" pm
+          WHERE pm."post_id" = "posts"."id"
+          ORDER BY pm."position" ASC LIMIT 1
+        ) AS thumbnail_url,
+        (
+          SELECT count(*)::int FROM "post_media" pm
+          WHERE pm."post_id" = "posts"."id"
+        ) AS media_count
+      FROM "posts"
+      WHERE ${condition}
+      ORDER BY ${buildPostPageOrder()}
+      LIMIT ${limit + 1}
+    `);
+
+    const rows = extractRows<RawRow>(result);
+    const hasMore = rows.length > limit;
+    const pageRows = rows.slice(0, limit);
+    const items = pageRows.map((row) => ({
+      postId: text(row.post_id),
+      caption: text(row.caption),
+      createdAt: toIso(row.cursor),
+      thumbnailUrl: nullableText(row.thumbnail_url),
+      mediaCount: numeric(row.media_count),
+    }));
+    const lastRow = pageRows.at(-1);
+
+    return {
+      items,
+      nextCursor:
+        hasMore && lastRow
+          ? encodePageCursor({ createdAt: text(lastRow.cursor), id: text(lastRow.post_id) })
+          : null,
+    };
+  } catch (error) {
+    logServerError("db.listProfilePosts", error, { userId });
+    throw new DatabaseError();
+  }
+}
+
+/** Creates an owned post row with a caller-generated ID for storage paths. */
+export async function createPostRecord(input: {
+  id: string;
+  userId: string;
+  caption: string;
+}): Promise<void> {
+  if (!parseUserId(input.id) || !parseUserId(input.userId)) {
+    throw new ValidationError("Invalid post identity.");
+  }
+
+  try {
+    await getDb()
+      .insert(posts)
+      .values({ id: input.id, userId: input.userId, caption: input.caption });
+  } catch (error) {
+    logServerError("db.createPostRecord", error, { userId: input.userId });
+    throw new DatabaseError();
+  }
+}
+
+export async function insertPostMedia(items: NewPostMedia[]): Promise<void> {
+  if (items.length === 0) return;
+
+  try {
+    await getDb().insert(postMedia).values(items);
+  } catch (error) {
+    logServerError("db.insertPostMedia", error, { count: items.length });
+    throw new DatabaseError();
+  }
+}
+
+export async function insertPostHashtags(
+  postId: string,
+  tags: string[],
+): Promise<void> {
+  if (tags.length === 0) return;
+  if (!parseUserId(postId)) throw new ValidationError("Invalid post identity.");
+
+  try {
+    await getDb()
+      .insert(postHashtags)
+      .values(
+        tags.map((tag, position) => ({
+          postId,
+          tag: tag.toLowerCase(),
+          position,
+        })),
+      )
+      .onConflictDoNothing();
+  } catch (error) {
+    logServerError("db.insertPostHashtags", error, { postId });
+    throw new DatabaseError();
+  }
+}
+
+async function loadMediaForPosts(postIds: string[]): Promise<Map<string, PublicPostMedia[]>> {
+  const map = new Map<string, PublicPostMedia[]>();
+  if (postIds.length === 0) return map;
+
+  const rows = await getDb()
+    .select({
+      id: postMedia.id,
+      postId: postMedia.postId,
+      publicUrl: postMedia.publicUrl,
+      mimeType: postMedia.mimeType,
+      byteSize: postMedia.byteSize,
+      width: postMedia.width,
+      height: postMedia.height,
+      altText: postMedia.altText,
+      position: postMedia.position,
+    })
+    .from(postMedia)
+    .where(inArray(postMedia.postId, postIds))
+    .orderBy(asc(postMedia.postId), asc(postMedia.position));
+
+  for (const row of rows) {
+    const list = map.get(row.postId) ?? [];
+    list.push({
+      id: row.id,
+      publicUrl: row.publicUrl,
+      mimeType: row.mimeType,
+      byteSize: row.byteSize,
+      width: row.width,
+      height: row.height,
+      altText: row.altText,
+      position: row.position,
+    });
+    map.set(row.postId, list);
+  }
+  return map;
+}
+
+async function loadHashtagsForPosts(postIds: string[]): Promise<Map<string, string[]>> {
+  const map = new Map<string, string[]>();
+  if (postIds.length === 0) return map;
+
+  const rows = await getDb()
+    .select({
+      postId: postHashtags.postId,
+      tag: postHashtags.tag,
+    })
+    .from(postHashtags)
+    .where(inArray(postHashtags.postId, postIds))
+    .orderBy(asc(postHashtags.postId), asc(postHashtags.position));
+
+  for (const row of rows) {
+    const list = map.get(row.postId) ?? [];
+    list.push(row.tag);
+    map.set(row.postId, list);
+  }
+  return map;
+}
+
+interface PostWithAuthorRow extends RawRow {
+  post_id: string;
+  caption: string;
+  cursor: string;
+  updated_at: Date | string;
+  author_id: string;
+  username: string;
+  display_name: string | null;
+  avatar_url: string | null;
+}
+
+function toPublicPost(
+  row: PostWithAuthorRow,
+  media: PublicPostMedia[],
+  hashtags: string[],
+): PublicPost {
+  return {
+    id: row.post_id,
+    author: {
+      userId: row.author_id,
+      username: row.username,
+      displayName: row.display_name ?? row.username,
+      avatarUrl: row.avatar_url,
+    },
+    caption: row.caption,
+    hashtags,
+    createdAt: toIso(row.cursor),
+    updatedAt: toIso(row.updated_at),
+    media: media.slice().sort((a, b) => a.position - b.position),
+  };
+}
+
+const POST_AUTHOR_COLUMNS = sql`
+  "posts"."id" AS post_id,
+  "posts"."caption" AS caption,
+  ${postCursorTimestamp} AS cursor,
+  "posts"."updated_at" AS updated_at,
+  u."id" AS author_id,
+  u."username" AS username,
+  p."display_name" AS display_name,
+  p."avatar_url" AS avatar_url
+`;
+
+const POST_AUTHOR_JOIN = sql`
+  FROM "posts"
+  INNER JOIN "users" u ON u."id" = "posts"."user_id"
+  LEFT JOIN "profiles" p ON p."user_id" = u."id"
+`;
+
+/** One post with its author, ordered media, and normalized hashtags. */
+export async function getPublicPostById(postId: string): Promise<PublicPost | null> {
+  if (!parseUserId(postId)) return null;
+
+  try {
+    const result = await getDb().execute<PostWithAuthorRow>(sql`
+      SELECT ${POST_AUTHOR_COLUMNS}
+      ${POST_AUTHOR_JOIN}
+      WHERE "posts"."id" = ${postId}
+      LIMIT 1
+    `);
+    const row = extractRows<PostWithAuthorRow>(result)[0];
+    if (!row) return null;
+
+    const [media, hashtags] = await Promise.all([
+      loadMediaForPosts([postId]),
+      loadHashtagsForPosts([postId]),
+    ]);
+
+    return toPublicPost(row, media.get(postId) ?? [], hashtags.get(postId) ?? []);
+  } catch (error) {
+    logServerError("db.getPublicPostById", error, { postId });
+    throw new DatabaseError();
+  }
+}
+
+/** Bounded feed page; an optional hashtag filters through post_hashtags. */
+export async function listRecentPosts(
+  options: { limit?: number; cursor?: string | null; tag?: string | null } = {},
+): Promise<PublicPostPage> {
+  const limit = safeLimit(options.limit, 12);
+  const cursor = decodePageCursor(options.cursor);
+  const tag = options.tag?.toLowerCase() || null;
+  const condition = buildPostPageCondition(sql`true`, cursor, tag);
+
+  try {
+    const result = await getDb().execute<PostWithAuthorRow>(sql`
+      SELECT ${POST_AUTHOR_COLUMNS}
+      ${POST_AUTHOR_JOIN}
+      WHERE ${condition}
+      ORDER BY ${buildPostPageOrder()}
+      LIMIT ${limit + 1}
+    `);
+
+    const rows = extractRows<PostWithAuthorRow>(result);
+    const hasMore = rows.length > limit;
+    const pageRows = rows.slice(0, limit);
+    const ids = pageRows.map((row) => row.post_id);
+    const [media, hashtags] = await Promise.all([
+      loadMediaForPosts(ids),
+      loadHashtagsForPosts(ids),
+    ]);
+
+    const items = pageRows.map((row) =>
+      toPublicPost(row, media.get(row.post_id) ?? [], hashtags.get(row.post_id) ?? []),
+    );
+    const lastRow = pageRows.at(-1);
+
+    return {
+      items,
+      nextCursor:
+        hasMore && lastRow
+          ? encodePageCursor({ createdAt: text(lastRow.cursor), id: text(lastRow.post_id) })
+          : null,
+    };
+  } catch (error) {
+    logServerError("db.listRecentPosts", error, { tagLength: tag?.length ?? 0 });
+    throw new DatabaseError();
+  }
+}
+
+/** Owner-scoped lookup used for edits and storage cleanup. */
+export async function getOwnedPostForMutation(
+  postId: string,
+  userId: string,
+): Promise<{ id: string; storagePaths: string[] } | null> {
+  if (!parseUserId(postId) || !parseUserId(userId)) {
+    throw new ValidationError("Invalid post identity.");
+  }
+
+  try {
+    const result = await getDb().execute<RawRow>(sql`
+      SELECT "posts"."id" AS post_id, pm."storage_path" AS storage_path
+      FROM "posts"
+      LEFT JOIN "post_media" pm ON pm."post_id" = "posts"."id"
+      WHERE "posts"."id" = ${postId} AND "posts"."user_id" = ${userId}
+      ORDER BY pm."position" ASC
+    `);
+    const rows = extractRows<RawRow>(result);
+    if (rows.length === 0) return null;
+
+    return {
+      id: text(rows[0]!.post_id),
+      storagePaths: rows
+        .map((row) => nullableText(row.storage_path))
+        .filter((path): path is string => Boolean(path)),
+    };
+  } catch (error) {
+    logServerError("db.getOwnedPostForMutation", error, { postId, userId });
+    throw new DatabaseError();
+  }
+}
+
+/** Owner-scoped caption update; non-owners receive no indication the post exists. */
+export async function updateOwnPost(
+  postId: string,
+  userId: string,
+  caption: string,
+): Promise<PublicPost | null> {
+  if (!parseUserId(postId) || !parseUserId(userId)) {
+    throw new ValidationError("Invalid post identity.");
+  }
+
+  try {
+    const rows = await getDb()
+      .update(posts)
+      .set({ caption, updatedAt: new Date() })
+      .where(and(eq(posts.id, postId), eq(posts.userId, userId)))
+      .returning({ id: posts.id });
+    if (rows.length === 0) return null;
+
+    await getDb()
+      .delete(postHashtags)
+      .where(eq(postHashtags.postId, postId));
+    await insertPostHashtags(postId, extractHashtags(caption));
+    return getPublicPostById(postId);
+  } catch (error) {
+    logServerError("db.updateOwnPost", error, { postId, userId });
+    throw new DatabaseError();
+  }
+}
+
+/** Deletes only the authenticated owner's post; media rows cascade. */
+export async function deleteOwnPost(
+  postId: string,
+  userId: string,
+): Promise<{ id: string; storagePaths: string[] } | null> {
+  const owned = await getOwnedPostForMutation(postId, userId);
+  if (!owned) return null;
+
+  try {
+    const rows = await getDb()
+      .delete(posts)
+      .where(and(eq(posts.id, postId), eq(posts.userId, userId)))
+      .returning({ id: posts.id });
+    if (rows.length === 0) return null;
+    return owned;
+  } catch (error) {
+    logServerError("db.deleteOwnPost", error, { postId, userId });
+    throw new DatabaseError();
+  }
+}

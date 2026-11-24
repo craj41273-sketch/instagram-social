@@ -1,6 +1,6 @@
 # Luma
 
-Premium, dark-first photo-sharing experience built on Next.js. **Blocks 1–5 are complete:** project foundation, design system, landing page, authentication UI, backend foundation, and real user profiles with a secure follow graph. Block 6 (feed/posts) is next. Uploads and post content are not implemented yet.
+Premium, dark-first photo-sharing experience built on Next.js. **Blocks 1–5 are complete.** Profiles now include validated avatar/cover uploads, a DB-backed post grid/count, social dialogs, suggested users, and optimistic follow updates. Block 6 adds complete post creation, media viewing, and owner-only editing.
 
 ## Stack
 
@@ -54,10 +54,11 @@ Open <http://localhost:3000>. Every route — the landing page, design system, a
 | `/login`, `/signup` | Real Supabase-backed authentication forms with shared Zod validation |
 | `/forgot-password`, `/reset-password`, `/verify-email` | Real recovery/verification flows; no simulated success |
 | `/auth/callback`, `/auth/confirm` | Supabase PKCE and OTP confirmation endpoints |
-| `/profile/[username]` | Public profile with real counts, follow/edit actions, and empty content tabs |
+| `/profile/[username]` | Public profile with real counts, follow/edit actions, social dialogs, suggestions, and a DB-backed post grid |
 | `/profile/[username]/followers`, `/following` | Cursor-paginated social graph lists |
-| `/profile/edit` | Authenticated, owner-only profile editor |
+| `/profile/edit` | Authenticated, owner-only profile editor with avatar/cover uploads |
 | `/api/users/search` | Authenticated, rate-limited username lookup foundation |
+| `/posts`, `/post/[postId]` | Post feed and detail (Block 6) |
 | `/privacy`, `/terms`, `/contact` | Honest placeholder pages so footer links resolve |
 
 > **Credential status:** all auth and profile routes are implemented locally; real signup, profile queries, follow mutations, and email delivery require the values in `.env.local`. No remote migration was applied from this environment. See [`docs/BACKEND.md`](docs/BACKEND.md) and [`docs/PROFILES.md`](docs/PROFILES.md).
@@ -97,8 +98,8 @@ Copy `.env.example` to `.env.local` and fill in real values. `.env*` files are i
 ```text
 app/(site)/           Marketing shell: landing, design system, policy pages
 app/(auth)/           Focused shell: login, signup, recovery, verification
-app/(social)/         Public profiles, owner editor, follower/following lists
-app/actions/          Authentication, profile, and follow server actions
+app/(social)/         Public profiles, owner editor, social lists, post routes
+app/actions/          Authentication, profile, media, follow, and post actions
 app/api/users/search  Authenticated username lookup foundation
 app/auth/             Supabase callback and OTP confirmation handlers
 app/                  Root providers, global styles, error/loading/not-found
@@ -110,12 +111,13 @@ components/layout/    Header, footer, page container, info-page template
 components/shared/    Brand, theme, states, media, identity components
 components/profile/   Profile header, avatar, stats, tabs, lists, forms, actions
 lib/auth/             Supabase clients, DAL, identity mapping, constants
-lib/db/               Drizzle client, schema, profile/follow ops, parameterized SQL
+lib/db/               Drizzle client, schema, profile/follow/post ops, parameterized SQL
 lib/profile/          Profile action state, display helpers, list loading
-lib/pagination.ts     Bounded cursors for social graph lists
+lib/posts/            Pure caption/hashtag helpers
+lib/pagination.ts     Bounded cursors for social graph and post lists
 lib/env/              Validated public/server-only environment access
 lib/security/         Rate-limit preparation and safe redirect helpers
-lib/storage/          Planned bucket names and storage boundary
+lib/storage/          Buckets, validated uploads, image checks, safe object keys
 lib/errors.ts         Typed errors and user-safe messages
 lib/logging.ts        Redacted server diagnostics
 lib/validations/      Zod schemas shared by UI and server actions
@@ -143,6 +145,8 @@ public/               Static assets
 - [x] Real Supabase Auth flows, session handling, and server-derived identity mapping
 - [x] Foundational Neon schema, generated migrations, and backend tests
 - [x] Real profiles, follow/unfollow, DB-backed counts, follower/following lists, and bounded user lookup
+- [x] Validated avatar/cover uploads, social dialogs, suggestions, optimistic follow updates, and a real profile post grid/count
 - [x] Typecheck, lint, build, and dev server verification
 - [ ] Remote Neon/Supabase integration verified with real credentials (deployment step)
-- [ ] Posts, feed, likes, comments, stories, messaging, notifications, explore, recommendations (later blocks)
+- [ ] Complete post creation, media viewer, editing, and feed (Block 6)
+- [ ] Likes, comments, stories, messaging, notifications, explore, recommendations (later blocks)

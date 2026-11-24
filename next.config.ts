@@ -8,6 +8,14 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
+  // Multi-image posts arrive through a single authenticated request. Ten
+  // 10 MB images plus multipart overhead stay under this limit; per-file MIME,
+  // magic-byte, and size checks are still enforced on the server.
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "120mb",
+    },
+  },
   images: {
     // Landing photography is referenced by stable Unsplash CDN IDs. Swap the
     // URLs in `lib/media.ts` when owned assets are available.

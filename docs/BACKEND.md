@@ -11,10 +11,10 @@ operations. Block 5 details live in `docs/PROFILES.md`.
 | --- | --- | --- |
 | UI | Next.js App Router, React, Tailwind | Existing Luma design system; no redesign |
 | Application logic | Server actions in `app/actions/`, services in `lib/` | Zod validation, rate limiting, safe errors |
-| Primary database | Neon PostgreSQL | App data: `users`, `profiles`, `follows` |
+| Primary database | Neon PostgreSQL | App data: `users`, `profiles`, `follows`, `posts`, `post_media`, `post_hashtags` |
 | ORM | Drizzle via `getDb()` | Lazy, cached `neon-http` client |
 | Identity provider | Supabase Auth | Sessions in HttpOnly-ish cookies via `@supabase/ssr` |
-| Storage | Supabase Storage | Boundary only; no buckets/created uploads |
+| Storage | Supabase Storage | Validated owner-scoped uploads for avatars, covers, and post media |
 | Session refresh | `proxy.ts` (Next.js 16 name for middleware) | Optimistic refresh + auth-only redirects |
 
 Neon is the **only application database**. Supabase's own Postgres is not used
@@ -45,7 +45,8 @@ Rules:
 
 ### Schema
 
-`lib/db/schema.ts` contains exactly two tables:
+`lib/db/schema.ts` contains the application tables below. Media bytes stay in
+Supabase Storage; Neon stores metadata URLs and constraints only.
 
 - **users**: `id` (UUID PK), `auth_user_id` (UUID, unique), `email`, `username`
   (unique), `created_at`, `updated_at`.
@@ -54,6 +55,14 @@ Rules:
   `location`, `created_at`, `updated_at`.
 - **follows**: `id` (UUID PK), `follower_id`/`following_id` (FK → `users.id`,
   cascade), `created_at`, unique pair, self-follow CHECK.
+- **posts**: `id` (UUID PK), `user_id` (FK → `users.id`, cascade), `caption`,
+  `created_at`, `updated_at`, caption-length CHECK.
+- **post_media**: `id` (UUID PK), `post_id` (FK → `posts.id`, cascade),
+  `storage_path` (unique), `public_url`, `mime_type`, `byte_size`, optional
+  `width`/`height`/`alt_text`, `position`, `created_at`; unique
+  `(post_id, position)` plus positive-size/position CHECKs.
+- **post_hashtags**: `id` (UUID PK), `post_id` (FK → `posts.id`, cascade),
+  normalized `tag`, `position`, `created_at`; unique `(post_id, tag)`.
 
 Indexes: unique indexes on `users.auth_user_id`, `users.username`,
 `lower(users.username)`, `profiles.user_id`, and
@@ -65,7 +74,7 @@ Usernames are normalized to lowercase by the shared Zod schema before any
 write. The `lower(username)` unique index is defense in depth.
 `users.username` is the only authoritative username column.
 
-No post, like, comment, story, message, or notification tables exist.
+Like, comment, story, message, and notification tables do not exist.
 
 ### Migrations
 
@@ -76,12 +85,14 @@ npm run db:studio     # inspect the database with Drizzle Studio
 npm run db:push       # development-only schema push; avoid on shared/production DBs
 ```
 
-Generated migrations: `drizzle/0000_nosy_zaran.sql` (Block 4) and
-`drizzle/0001_high_quentin_quire.sql` (Block 5: `follows` + `location`). Both
-were generated locally; they have **not** been applied to a remote database
-because no real Neon credentials were available. Apply them manually with
-`npm run db:migrate` after setting `DATABASE_URL`. Never run a destructive
-migration against a database with data without reviewing it first.
+Generated migrations: `drizzle/0000_nosy_zaran.sql` (Block 4),
+`drizzle/0001_high_quentin_quire.sql` (Block 5: `follows` + `location`),
+`drizzle/0002_posts_media.sql` (posts + media metadata), and
+`drizzle/0003_post_hashtags.sql` (normalized hashtags). All were generated
+locally; they have **not** been applied to a remote database because no real
+Neon credentials were available. Apply them in order with `npm run db:migrate`
+after setting `DATABASE_URL`. Never run a destructive migration against a
+database with data without reviewing it first.
 
 ## Identity mapping
 
@@ -163,8 +174,9 @@ are optimistic; server actions and the DAL perform the authoritative checks.
   profile/follow/search endpoints. Replace with a shared store before
   multi-instance deployment.
 - Database constraints back application checks for usernames, follow uniqueness,
-  self-follows, and cascade deletion.
-- Storage bucket names are constants; no public bucket is created implicitly.
+  self-follows, caption/media limits, and cascade deletion.
+- Uploads use owner-namespaced paths, MIME allowlists, magic-byte checks, and
+  request-scoped Supabase clients so Storage RLS still applies.
 
 ## Realtime architecture
 
@@ -180,14 +192,17 @@ notifications, presence) use one of:
 Do not enable Supabase Postgres Changes as a substitute for Neon replication.
 No messaging or realtime feature is implemented in this block.
 
-## Storage preparation
+## Storage
 
-`lib/storage/index.ts` defines future bucket names: `avatars`, `post-media`,
-`stories`, `message-attachments`, plus a storage client boundary and key
-normalizer. No bucket is created, no upload route exists, and no object is made
-public. Block 5 renders `avatar_url`/`cover_url` only for safe HTTP(S) values and
-uses polished fallbacks otherwise. Bucket privacy and upload policies will be
-evaluated when real media creation arrives in Block 6.
+`lib/storage/index.ts` defines bucket names (`avatars`, `post-media`, `stories`,
+`message-attachments`). `lib/storage/upload.ts` uploads validated bytes with the
+request-scoped Supabase client; `lib/storage/paths.ts` keeps every object under
+the verified auth user's prefix. Upload size limits are enforced in application
+code and by `experimental.serverActions.bodySizeLimit` in `next.config.ts`.
+
+Buckets and owner-write policies must be created in Supabase before uploads
+work; `docs/PROFILES.md` includes the SQL. The service-role key is not used for
+uploads. Image bytes are never written to Neon.
 
 ## Testing and status
 

@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   check,
   index,
+  integer,
   pgTable,
   text,
   timestamp,
@@ -99,9 +100,96 @@ export const follows = pgTable(
   ],
 );
 
+/**
+ * A post is owned by an application user. Caption text and media metadata live
+ * in Neon; image bytes never do. Stable (created_at, id) ordering supports
+ * cursor pagination for both the profile grid and the shared feed.
+ */
+export const posts = pgTable(
+  "posts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    caption: text("caption").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("posts_user_id_idx").on(table.userId),
+    index("posts_user_created_idx").on(table.userId, table.createdAt),
+    index("posts_created_at_idx").on(table.createdAt),
+    check("posts_caption_length_check", sql`length(${table.caption}) <= 2200`),
+  ],
+);
+
+/** Supabase Storage metadata; `storage_path` is unique and owner-namespaced. */
+export const postMedia = pgTable(
+  "post_media",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    postId: uuid("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    storagePath: text("storage_path").notNull(),
+    publicUrl: text("public_url").notNull(),
+    mimeType: text("mime_type").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    width: integer("width"),
+    height: integer("height"),
+    altText: text("alt_text"),
+    position: integer("position").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("post_media_storage_path_unique").on(table.storagePath),
+    uniqueIndex("post_media_post_position_unique").on(table.postId, table.position),
+    index("post_media_post_idx").on(table.postId),
+    check("post_media_position_check", sql`${table.position} >= 0`),
+    check("post_media_byte_size_check", sql`${table.byteSize} > 0`),
+  ],
+);
+
+/** Normalized hashtags extracted from a post caption; metadata only. */
+export const postHashtags = pgTable(
+  "post_hashtags",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    postId: uuid("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    tag: text("tag").notNull(),
+    position: integer("position").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("post_hashtags_post_tag_unique").on(table.postId, table.tag),
+    uniqueIndex("post_hashtags_post_position_unique").on(table.postId, table.position),
+    index("post_hashtags_tag_idx").on(table.tag),
+    index("post_hashtags_post_idx").on(table.postId),
+    check("post_hashtags_tag_format_check", sql`${table.tag} ~ '^[a-z0-9_]{1,30}$'`),
+    check("post_hashtags_position_check", sql`${table.position} >= 0`),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Profile = typeof profiles.$inferSelect;
 export type NewProfile = typeof profiles.$inferInsert;
 export type Follow = typeof follows.$inferSelect;
 export type NewFollow = typeof follows.$inferInsert;
+export type Post = typeof posts.$inferSelect;
+export type NewPost = typeof posts.$inferInsert;
+export type PostMedia = typeof postMedia.$inferSelect;
+export type NewPostMedia = typeof postMedia.$inferInsert;
+export type PostHashtag = typeof postHashtags.$inferSelect;
+export type NewPostHashtag = typeof postHashtags.$inferInsert;

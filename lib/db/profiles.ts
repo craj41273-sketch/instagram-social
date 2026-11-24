@@ -3,11 +3,13 @@ import { and, eq, ne } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { profiles, users } from "@/lib/db/schema";
 import {
+  buildUpdateProfileImageStatement,
   buildUpdateProfileStatement,
   parseUserId,
   updateProfileInputSchema,
   type UpdateProfileInput,
 } from "@/lib/db/profile-sql";
+import type { ProfileImageKind } from "@/lib/storage/paths";
 import {
   DatabaseError,
   ValidationError,
@@ -211,6 +213,30 @@ export async function updateOwnProfile(
       throw new ValidationError("That username is already taken. Please choose another.");
     }
     logServerError("db.updateOwnProfile", error, { userId: parsedUserId });
+    throw new DatabaseError();
+  }
+}
+
+/** Persists a storage URL for the authenticated owner's avatar or cover. */
+export async function updateProfileImage(
+  userId: string,
+  kind: ProfileImageKind,
+  url: string,
+): Promise<void> {
+  const parsedUserId = parseUserId(userId);
+  if (!parsedUserId) throw new ValidationError("Invalid account identity.");
+
+  try {
+    const result = await getDb().execute<{ profile_id: string; user_id: string }>(
+      buildUpdateProfileImageStatement(parsedUserId, kind, url),
+    );
+    const row = extractRows<{ profile_id: string; user_id: string }>(result)[0];
+    if (!row?.profile_id || row.user_id !== parsedUserId) {
+      throw new DatabaseError("We could not save that image. Please try again.");
+    }
+  } catch (error) {
+    if (error instanceof ValidationError || error instanceof DatabaseError) throw error;
+    logServerError("db.updateProfileImage", error, { userId: parsedUserId, kind });
     throw new DatabaseError();
   }
 }

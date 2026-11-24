@@ -41,8 +41,8 @@ receive serializable props.
 ```text
 app/(site)/           Marketing route group: landing, design system, policy pages
 app/(auth)/           Auth route group: login, signup, recovery, verification
-app/(social)/         Public profiles, owner editor, follower/following lists
-app/actions/          Authentication, profile, and follow server actions
+app/(social)/         Public profiles, owner editor, social lists, post routes
+app/actions/          Authentication, profile, media, follow, and post actions
 app/api/users/search  Authenticated username lookup foundation
 app/auth/             Supabase PKCE callback and OTP confirmation handlers
 app/                  Root providers, global styles, loading/error/not-found
@@ -56,10 +56,11 @@ lib/media.ts          Replaceable landing photography sources
 lib/auth/             Supabase clients, DAL, identity mapping, constants
 lib/db/               Drizzle client (`getDb`), schema, profile/follow ops, parameterized SQL
 lib/profile/          Profile action state, display helpers, social list loading
-lib/pagination.ts     Bounded keyset cursors for social graph lists
+lib/posts/            Pure caption/hashtag helpers
+lib/pagination.ts     Bounded keyset cursors for social graph and post lists
 lib/env/              Public and server-only env schemas + getters
 lib/security/         Rate-limit preparation and safe redirect helpers
-lib/storage/          Planned storage buckets and storage client boundary
+lib/storage/          Buckets, validated uploads, image checks, safe object keys
 lib/errors.ts         Typed errors and safe user messages
 lib/logging.ts        Redacted server diagnostics
 lib/validations/      Zod schemas shared by client and server
@@ -86,11 +87,13 @@ The UI layer is backed by a documented design system (`docs/DESIGN_SYSTEM.md`):
 
 ## Domain plan
 
-Block 4 implemented `users` and `profiles`; Block 5 added profile `location`
-and the constrained `follows` table, with additive migrations in `drizzle/`.
-Block 6 and later will add domain tables incrementally: `posts`, `post_media`,
-`likes`, `comments`, `stories`, `story_views`, `conversations`, `messages`,
-`notifications`, and `saved_posts`.
+Block 4 implemented `users` and `profiles`; the expanded Block 5 added profile
+`location`, the constrained `follows` table, and the shared `posts`,
+`post_media`, and `post_hashtags` metadata tables, all with additive migrations
+in `drizzle/`. Media bytes live in Supabase Storage; Neon stores validated
+metadata, ownership, ordering, and constraints. Block 6 completes the
+post/media UI and lifecycle. Later blocks add `likes`, `comments`, `stories`,
+`story_views`, `conversations`, `messages`, `notifications`, and `saved_posts`.
 
 Neon is the only application database. Supabase Auth owns identity; its own
 Postgres is not used as a second app database. Application-level authorization

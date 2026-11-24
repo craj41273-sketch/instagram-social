@@ -1,7 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
-import { useFormStatus } from "react-dom";
+import { useState, useTransition, useOptimistic } from "react";
 import Link from "next/link";
 import { Check } from "lucide-react";
 import { followAction } from "@/app/actions/follows";
@@ -28,14 +27,14 @@ function PendingAwareButton({
   loadingLabel,
   premiumVariant,
   compact,
+  pending,
 }: {
   label: string;
   loadingLabel: string;
   premiumVariant: "gradient" | "soft" | "outline" | "danger";
   compact?: boolean;
+  pending: boolean;
 }) {
-  const { pending } = useFormStatus();
-
   return (
     <PremiumButton
       type="submit"
@@ -57,7 +56,7 @@ function PendingAwareButton({
   );
 }
 
-/** Real follow state: initial value comes from the database, updates from actions. */
+/** Real follow state with an instant optimistic toggle and server confirmation. */
 export function FollowButton({
   targetUsername,
   initialFollowing,
@@ -66,11 +65,14 @@ export function FollowButton({
   loginHref,
   compact = false,
 }: FollowButtonProps) {
-  const [state, formAction] = useActionState<FollowActionState, FormData>(
-    followAction,
-    initialFollowActionState(),
+  const [serverFollowing, setServerFollowing] = useState(initialFollowing);
+  const [optimisticFollowing, setOptimisticFollowing] = useOptimistic(
+    serverFollowing,
+    (_current: boolean, next: boolean) => next,
   );
+  const [isPending, startTransition] = useTransition();
   const [confirming, setConfirming] = useState(false);
+  const [feedback, setFeedback] = useState<{ text: string; tone: "error" | "success" } | null>(null);
 
   if (isSelf) {
     return <StatusBadge tone="brand">This is you</StatusBadge>;
@@ -78,75 +80,114 @@ export function FollowButton({
 
   if (!isAuthenticated) {
     return (
-      <PremiumButton
-        premiumVariant="soft"
-        size={compact ? "sm" : "lg"}
-        asChild
-      >
+      <PremiumButton premiumVariant="soft" size={compact ? "sm" : "lg"} asChild>
         <Link href={loginHref}>Sign in to follow</Link>
       </PremiumButton>
     );
   }
 
-  const following = state.following ?? initialFollowing;
-  const showUnfollowConfirm = confirming && following;
+  function submit(intent: "follow" | "unfollow") {
+    const nextFollowing = intent === "follow";
+    setFeedback(null);
+    setConfirming(false);
+
+    startTransition(async () => {
+      setOptimisticFollowing(nextFollowing);
+
+      const formData = new FormData();
+      formData.set("username", targetUsername);
+      formData.set("intent", intent);
+
+      try {
+        const result: FollowActionState = await followAction(
+          initialFollowActionState(),
+          formData,
+        );
+
+        if (typeof result.following === "boolean") {
+          setServerFollowing(result.following);
+        }
+        if (result.message) {
+          setFeedback({
+            text: result.message,
+            tone: result.status === "error" ? "error" : "success",
+          });
+        }
+      } catch {
+        setFeedback({ text: "We could not update this follow. Please try again.", tone: "error" });
+      }
+    });
+  }
+
+  const showUnfollowConfirm = confirming && optimisticFollowing;
 
   return (
     <div className={cn("flex flex-col gap-1.5", !compact && "items-start")}>
       {showUnfollowConfirm ? (
-        <form action={formAction} className="flex flex-wrap items-center gap-2">
-          <input type="hidden" name="username" value={targetUsername} />
-          <input type="hidden" name="intent" value="unfollow" />
+        <form
+          className="flex flex-wrap items-center gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            submit("unfollow");
+          }}
+        >
           <PendingAwareButton
             label="Confirm unfollow"
             loadingLabel="Unfollowing…"
             premiumVariant="danger"
             compact={compact}
+            pending={isPending}
           />
           <PremiumButton
             type="button"
             premiumVariant="ghost"
             size={compact ? "sm" : "lg"}
             onClick={() => setConfirming(false)}
+            disabled={isPending}
           >
             Cancel
           </PremiumButton>
         </form>
-      ) : following ? (
+      ) : optimisticFollowing ? (
         <PremiumButton
           type="button"
           premiumVariant="outline"
           size={compact ? "sm" : "lg"}
           onClick={() => setConfirming(true)}
           aria-label={`Following ${targetUsername}. Select to unfollow.`}
+          disabled={isPending}
           className={cn(!compact && "min-w-30")}
         >
           <Check aria-hidden="true" />
           Following
         </PremiumButton>
       ) : (
-        <form action={formAction}>
-          <input type="hidden" name="username" value={targetUsername} />
-          <input type="hidden" name="intent" value="follow" />
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            submit("follow");
+          }}
+        >
           <PendingAwareButton
             label="Follow"
             loadingLabel="Following…"
             premiumVariant="gradient"
             compact={compact}
+            pending={isPending}
           />
         </form>
       )}
 
-      {state.message ? (
+      {feedback ? (
         <p
-          role={state.status === "error" ? "alert" : undefined}
-          aria-live={state.status === "success" ? "polite" : undefined}
+          role={feedback.tone === "error" ? "alert" : undefined}
+          aria-live={feedback.tone === "success" ? "polite" : undefined}
           className={cn(
             "text-xs",
-            state.status === "error" ? "text-destructive" : "text-muted-foreground",
+            feedback.tone === "error" ? "text-destructive" : "text-muted-foreground",
           )}
         >
-          {state.message}
+          {feedback.text}
         </p>
       ) : null}
     </div>

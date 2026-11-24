@@ -35,6 +35,11 @@ export function decodeFollowCursor(value: string | undefined | null): FollowCurs
   }
 }
 
+/** Generic aliases keep feed/profile cursors distinct from follow semantics. */
+export type PageCursor = FollowCursor;
+export const encodePageCursor = encodeFollowCursor;
+export const decodePageCursor = decodeFollowCursor;
+
 /** Query-string values are untrusted; keep page size predictable. */
 export function parseListLimit(value: unknown): number {
   const parsed = z.coerce.number().int().min(1).max(MAX_LIST_PAGE_SIZE).safeParse(value);

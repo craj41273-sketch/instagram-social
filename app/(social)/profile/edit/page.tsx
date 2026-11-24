@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireProfile } from "@/lib/auth/dal";
 import { PageContainer } from "@/components/layout/page-container";
 import { EditProfileForm } from "@/components/profile/edit-profile-form";
+import { ProfileMediaForms } from "@/components/profile/profile-media-forms";
 import { PremiumButton } from "@/components/ui/premium-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -27,6 +28,19 @@ export default async function EditProfilePage() {
           Your username is the single source of truth and appears across every profile link.
         </p>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Profile images</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ProfileMediaForms
+            avatarUrl={current.profile.avatarUrl}
+            coverUrl={current.profile.coverUrl}
+            displayName={current.profile.displayName}
+          />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

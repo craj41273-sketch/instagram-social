@@ -60,7 +60,7 @@ Status legend: `[x]` complete, `[~]` in progress, `[ ]` planned.
 
 > Remote Neon migration/query execution and live Supabase signup/login/email delivery still require real credentials in `.env.local`; they were not claimed as verified. See `docs/BACKEND.md` and the completion report.
 
-## Block 5 — User profiles and social graph (complete)
+## Block 5 — User profiles and social graph (expanded scope, complete)
 
 - [x] Inspect existing rules, schema, auth, DB config, protection, UI, tokens, Git state, and profile routes
 - [x] Add `location` to profiles and a constrained `follows` table; `users.username` remains authoritative
@@ -71,17 +71,29 @@ Status legend: `[x]` complete, `[~]` in progress, `[ ]` planned.
 - [x] Real follow/unfollow actions with authentication, self-follow prevention, duplicate-safe inserts, and idempotent deletes
 - [x] Cursor-prepared follower/following pages with batched follow-status queries
 - [x] Authenticated, rate-limited username lookup foundation (`/api/users/search`)
-- [x] Supabase Storage rendering boundary with safe URLs and polished fallbacks; no fake uploads
+- [x] Supabase Storage rendering boundary with safe URLs and polished fallbacks
 - [x] Reusable profile/follow operations, actions, components, structural tests, and opt-in DB integration tests
 - [x] Documentation for schema, routes, security, migration steps, and known limitations
+- [x] Add validated avatar/cover uploads backed by Supabase Storage and update profile image fields
+- [x] Add real `posts`/media metadata tables, DB-backed profile post count, and profile posts grid with honest empty state
+- [x] Add followers/following dialogs with cursor pagination and working load-more controls
+- [x] Add suggested users from real DB records with working follow buttons
+- [x] Add optimistic follow/unfollow feedback plus loading, empty, and error feedback
+- [x] Expand automated tests for profile editing, media validation, follow mutations, and authorization
+- [x] Re-run lint, TypeScript, production build, and dev-server route checks
 
 > Remote Neon migration/query execution and live Supabase authenticated tests still require real credentials; they were not claimed as verified. See `docs/PROFILES.md`.
 
-## Block 6 — Feed and posts
+## Block 6 — Posts and media system (in progress)
 
-- [ ] Post creation with validated Supabase Storage uploads
+- [ ] Multi-image post creation with previews, removal, reordering, captions, and hashtags
+- [ ] Supabase Storage upload validation: MIME types, size limits, secure paths, permissions, and progress
+- [x] Database metadata for posts and media; never store image bytes in Neon
+- [ ] Create, edit, delete, detail, and multiple-media post operations with owner-only authorization
+- [ ] Create-post modal, upload area, preview carousel, caption editor, post card, detail page, and media viewer
+- [ ] Drag-and-drop, loading, empty, error, and mobile-friendly states
+- [ ] Real upload/post lifecycle tests when credentials are available
 - [ ] Feed queries with pagination and optimistic UI
-- [ ] Post detail route
 - [ ] Likes and save state
 - [ ] Comments and replies
 

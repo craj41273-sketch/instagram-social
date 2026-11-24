@@ -1,7 +1,8 @@
 import "server-only";
-import { and, asc, eq, ilike, ne } from "drizzle-orm";
+import { and, asc, eq, ilike, ne, sql } from "drizzle-orm";
+import { z } from "zod";
 import { getDb } from "@/lib/db";
-import { profiles, users } from "@/lib/db/schema";
+import { follows, profiles, users } from "@/lib/db/schema";
 import { DatabaseError } from "@/lib/errors";
 import { logServerError } from "@/lib/logging";
 import { userSearchQuerySchema } from "@/lib/validations/profile";
@@ -62,9 +63,68 @@ export interface UserSearchPage {
   nextOffset: number | null;
 }
 
+/** Suggestions use the same safe shape as a follow-list row. */
+export interface SuggestedUser {
+  userId: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+  isFollowing: false;
+  followedAt: string;
+}
+
 /** LIKE patterns treat these as wildcards; search input must remain literal. */
 function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, "\\$&");
+}
+
+/**
+ * Real, unfollowed accounts ordered by existing follower count. The viewer ID
+ * always comes from the DAL and is never accepted from the request.
+ */
+export async function getSuggestedUsers(
+  viewerUserId: string,
+  limit = 6,
+): Promise<SuggestedUser[]> {
+  const safeLimit = Math.min(12, Math.max(1, Math.floor(limit)));
+  const parsed = z.uuid().safeParse(viewerUserId);
+  if (!parsed.success) return [];
+
+  try {
+    const rows = await getDb()
+      .select({
+        userId: users.id,
+        username: users.username,
+        displayName: profiles.displayName,
+        avatarUrl: profiles.avatarUrl,
+        followedAt: users.createdAt,
+      })
+      .from(users)
+      .leftJoin(profiles, eq(profiles.userId, users.id))
+      .where(
+        and(
+          ne(users.id, parsed.data),
+          sql`not exists (
+            select 1 from ${follows} f
+            where f.follower_id = ${parsed.data} and f.following_id = ${users.id}
+          )`,
+        ),
+      )
+      .orderBy(asc(users.username))
+      .limit(safeLimit);
+
+    return rows.map((row) => ({
+      userId: row.userId,
+      username: row.username,
+      displayName: row.displayName ?? row.username,
+      avatarUrl: row.avatarUrl,
+      isFollowing: false as const,
+      followedAt: row.followedAt.toISOString(),
+    }));
+  } catch (error) {
+    logServerError("db.getSuggestedUsers", error, { userId: parsed.data });
+    throw new DatabaseError();
+  }
 }
 
 /**

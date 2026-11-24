@@ -25,3 +25,22 @@ export interface FollowActionState {
 export function initialFollowActionState(): FollowActionState {
   return { status: "idle" };
 }
+
+export interface MediaActionState {
+  status: "idle" | "error" | "success";
+  message?: string;
+}
+
+export function initialMediaActionState(): MediaActionState {
+  return { status: "idle" };
+}
+
+export interface PostActionState {
+  status: "idle" | "error" | "success";
+  message?: string;
+  postId?: string;
+}
+
+export function initialPostActionState(): PostActionState {
+  return { status: "idle" };
+}
