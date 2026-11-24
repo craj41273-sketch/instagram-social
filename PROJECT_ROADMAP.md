@@ -117,6 +117,7 @@ Status legend: `[x]` complete, `[~]` in progress, `[ ]` planned.
 Scope and decision gate live in [`docs/GITDB_MIGRATION_SPIKE.md`](docs/GITDB_MIGRATION_SPIKE.md).
 
 - [ ] Decide integration architecture (Go sidecar service vs. in-process bridge)
+- [ ] Define Neon-primary/GitDB offline fallback, stale-data signalling, and reconnect reconciliation
 - [ ] Map current users, profiles, and follows to GitDB models and invariants
 - [ ] Prototype a server-only compatibility layer for current data operations
 - [ ] Port correctness/security tests, including concurrency and cursor pagination
