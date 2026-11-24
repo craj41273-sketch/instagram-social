@@ -62,6 +62,8 @@ Open <http://localhost:3000>. Every route — the landing page, design system, a
 
 > **Credential status:** all auth and profile routes are implemented locally; real signup, profile queries, follow mutations, and email delivery require the values in `.env.local`. No remote migration was applied from this environment. See [`docs/BACKEND.md`](docs/BACKEND.md) and [`docs/PROFILES.md`](docs/PROFILES.md).
 
+> **Future evaluation:** an approved, not-started spike will assess GitDB as an alternative to Neon. It is not part of Block 6 and does not change the current stack. See [`docs/GITDB_MIGRATION_SPIKE.md`](docs/GITDB_MIGRATION_SPIKE.md).
+
 > **Platform note:** `dev` and `build` deliberately pass `--webpack`. This project was initialized on Android/arm64, where Turbopack native bindings are unavailable. On a supported machine you may remove the flag.
 
 ## Scripts

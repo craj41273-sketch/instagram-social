@@ -111,3 +111,15 @@ Status legend: `[x]` complete, `[~]` in progress, `[ ]` planned.
 - [ ] Production environment configuration
 - [ ] Performance budget and build verification
 - [ ] Deployment and smoke tests
+
+## Deferred spike — GitDB migration evaluation (approved, not started)
+
+Scope and decision gate live in [`docs/GITDB_MIGRATION_SPIKE.md`](docs/GITDB_MIGRATION_SPIKE.md).
+
+- [ ] Decide integration architecture (Go sidecar service vs. in-process bridge)
+- [ ] Map current users, profiles, and follows to GitDB models and invariants
+- [ ] Prototype a server-only compatibility layer for current data operations
+- [ ] Port correctness/security tests, including concurrency and cursor pagination
+- [ ] Define Neon export, GitDB import, parity check, cutover, and rollback
+- [ ] Assess persistent storage, remote sync, deployment, and service isolation
+- [ ] Record decision: proceed with migration or retain Neon
