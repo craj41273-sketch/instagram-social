@@ -38,8 +38,10 @@ import {
   encodePageCursor,
   parseListLimit,
 } from "@/lib/pagination.ts";
+import { captionParts, formatPostTimestamp } from "@/lib/posts/format.ts";
 import { extractHashtags } from "@/lib/posts/hashtags.ts";
 import { profileInitials, safeHttpUrl } from "@/lib/profile/format.ts";
+import { isSameOriginPost } from "@/lib/security/request-origin.ts";
 import {
   assertImageBytes,
   detectImageMime,
@@ -59,6 +61,8 @@ import {
 import {
   createPostInputSchema,
   editPostSchema,
+  postFeedQuerySchema,
+  postMediaMetaListSchema,
 } from "@/lib/validations/post.ts";
 
 const ownerId = "11111111-1111-4111-8111-111111111111";
@@ -368,6 +372,38 @@ test("hashtags are normalized, bounded, and deduplicated", () => {
     ["sunset", "luma_2026", "a", "b", "c", "d", "e", "f", "g", "h"],
   );
   assert.deepEqual(extractHashtags("email me at a@b.com #nope%"), []);
+});
+
+test("post captions render only normalized hashtags", () => {
+  assert.deepEqual(captionParts("Hi #Sunset!"), [
+    { text: "Hi ", tag: null },
+    { text: "#Sunset", tag: "sunset" },
+    { text: "!", tag: null },
+  ]);
+  assert.equal(formatPostTimestamp("not-a-date"), "Unknown date");
+  assert.match(formatPostTimestamp("2026-11-24T12:34:56Z"), /Nov 24, 2026 · 12:34 PM UTC/);
+});
+
+test("post uploads require a same-origin browser request", () => {
+  assert.equal(isSameOriginPost("https://luma.example", "https://luma.example"), true);
+  assert.equal(isSameOriginPost("https://luma.example:443", "https://luma.example"), true);
+  assert.equal(isSameOriginPost("https://evil.example", "https://luma.example"), false);
+  assert.equal(isSameOriginPost("null", "https://luma.example"), false);
+  assert.equal(isSameOriginPost(null, "https://luma.example"), false);
+});
+
+test("post media hints and feed filters stay bounded", () => {
+  assert.equal(
+    postMediaMetaListSchema.safeParse([{ width: 1200, height: 800, altText: "Sunset" }]).success,
+    true,
+  );
+  assert.equal(postMediaMetaListSchema.safeParse([{ width: 20_001 }]).success, false);
+  assert.equal(
+    postMediaMetaListSchema.safeParse(Array.from({ length: 11 }, () => ({}))).success,
+    false,
+  );
+  assert.equal(postFeedQuerySchema.parse({ tag: "Sunset" }).tag, "sunset");
+  assert.equal(postFeedQuerySchema.safeParse({ tag: "bad tag" }).success, false);
 });
 
 test("image validation checks declared type, magic bytes, and size", () => {

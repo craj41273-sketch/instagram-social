@@ -380,13 +380,19 @@ export default function DesignSystemPage() {
 
         <Section
           title="Media"
-          description="Ratio-aware image frames with loading and fallback states."
+          description="Ratio-aware image frames with cover/contain fit, loading, and fallback states."
         >
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-4">
             <ImageContainer
               alt="Prism artwork square"
               src="/prism-art.svg"
               ratio="square"
+            />
+            <ImageContainer
+              alt="Contained media preview"
+              src="/prism-art.svg"
+              ratio="square"
+              fit="contain"
             />
             <ImageContainer
               alt="Loading preview"

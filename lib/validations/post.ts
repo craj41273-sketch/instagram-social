@@ -35,6 +35,22 @@ export const createPostInputSchema = z.object({
 
 export type CreatePostInput = z.infer<typeof createPostInputSchema>;
 
+/**
+ * Browser-supplied display hints are optional and bounded. The server still
+ * revalidates every image's declared type, magic bytes, and actual byte count.
+ */
+export const postMediaMetaSchema = z.object({
+  width: z.number().int().positive().max(20_000).nullable().optional(),
+  height: z.number().int().positive().max(20_000).nullable().optional(),
+  altText: z.string().trim().max(160).nullable().optional(),
+});
+
+export const postMediaMetaListSchema = z
+  .array(postMediaMetaSchema)
+  .max(IMAGE_LIMITS.MAX_POST_MEDIA);
+
+export type PostMediaMeta = z.infer<typeof postMediaMetaSchema>;
+
 export const editPostSchema = z.object({
   postId: z.uuid(),
   caption: postCaptionSchema,

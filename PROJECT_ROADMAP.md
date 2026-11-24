@@ -84,18 +84,21 @@ Status legend: `[x]` complete, `[~]` in progress, `[ ]` planned.
 
 > Remote Neon migration/query execution and live Supabase authenticated tests still require real credentials; they were not claimed as verified. See `docs/PROFILES.md`.
 
-## Block 6 — Posts and media system (in progress)
+## Block 6 — Posts and media system (posts/media complete; engagement later)
 
-- [ ] Multi-image post creation with previews, removal, reordering, captions, and hashtags
-- [ ] Supabase Storage upload validation: MIME types, size limits, secure paths, permissions, and progress
+- [x] Multi-image post creation with previews, removal, reordering, captions, and hashtags
+- [x] Supabase Storage upload validation: MIME types, size limits, secure paths, permissions, and progress
 - [x] Database metadata for posts and media; never store image bytes in Neon
-- [ ] Create, edit, delete, detail, and multiple-media post operations with owner-only authorization
-- [ ] Create-post modal, upload area, preview carousel, caption editor, post card, detail page, and media viewer
-- [ ] Drag-and-drop, loading, empty, error, and mobile-friendly states
+- [x] Create, edit, delete, detail, and multiple-media post operations with owner-only authorization
+- [x] Create-post modal, upload area, preview carousel, caption editor, post card, detail page, and media viewer
+- [x] Drag-and-drop, loading, empty, error, and mobile-friendly states
+- [x] Automated structural tests for upload/post validation, caption rendering, and same-origin writes
 - [ ] Real upload/post lifecycle tests when credentials are available
-- [ ] Feed queries with pagination and optimistic UI
+- [x] Cursor-paginated feed with hashtag filters and real DB records
 - [ ] Likes and save state
 - [ ] Comments and replies
+
+> Posts/media are implemented locally. Remote migration, live upload lifecycle, and Supabase bucket policies still require real credentials; likes, save, and comments remain later work.
 
 ## Block 7 — Stories and notifications
 

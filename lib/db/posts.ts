@@ -198,6 +198,25 @@ export async function createPostRecord(input: {
   }
 }
 
+/** Rolls back a partially created post when metadata inserts fail. */
+export async function deletePostRecordById(
+  postId: string,
+  userId: string,
+): Promise<void> {
+  if (!parseUserId(postId) || !parseUserId(userId)) {
+    throw new ValidationError("Invalid post identity.");
+  }
+
+  try {
+    await getDb()
+      .delete(posts)
+      .where(and(eq(posts.id, postId), eq(posts.userId, userId)));
+  } catch (error) {
+    logServerError("db.deletePostRecordById", error, { postId, userId });
+    throw new DatabaseError();
+  }
+}
+
 export async function insertPostMedia(items: NewPostMedia[]): Promise<void> {
   if (items.length === 0) return;
 

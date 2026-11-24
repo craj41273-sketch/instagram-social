@@ -17,7 +17,15 @@ export default function SocialLayout({ children }: { children: ReactNode }) {
           >
             <Brand />
           </Link>
-          <ThemeToggle />
+          <nav aria-label="Social navigation" className="flex items-center gap-3 sm:gap-4">
+            <Link
+              href="/posts"
+              className="rounded-md px-2 py-1 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              Posts
+            </Link>
+            <ThemeToggle />
+          </nav>
         </PageContainer>
       </header>
       <main className="flex-1 py-8 sm:py-10">{children}</main>

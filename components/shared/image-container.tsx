@@ -3,6 +3,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 type Ratio = "square" | "portrait" | "landscape" | "wide" | "fill";
+type ImageFit = "cover" | "contain";
+
+const fitStyles: Record<ImageFit, string> = {
+  cover: "object-cover",
+  contain: "object-contain",
+};
 
 const ratioStyles: Record<Ratio, string> = {
   square: "aspect-square",
@@ -16,6 +22,7 @@ interface ImageContainerProps {
   alt: string;
   src?: string;
   ratio?: Ratio;
+  fit?: ImageFit;
   loading?: boolean;
   priority?: boolean;
   unoptimized?: boolean;
@@ -28,6 +35,7 @@ export function ImageContainer({
   alt,
   src,
   ratio = "square",
+  fit = "cover",
   loading = false,
   priority = false,
   unoptimized = false,
@@ -52,7 +60,10 @@ export function ImageContainer({
           sizes={sizes}
           priority={priority}
           unoptimized={unoptimized}
-          className="object-cover transition-transform duration-500 ease-soft group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+          className={cn(
+            fitStyles[fit],
+            "transition-transform duration-500 ease-soft group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100",
+          )}
         />
       ) : (
         <div

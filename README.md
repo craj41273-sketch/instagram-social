@@ -1,6 +1,6 @@
 # Luma
 
-Premium, dark-first photo-sharing experience built on Next.js. **Blocks 1–5 are complete.** Profiles now include validated avatar/cover uploads, a DB-backed post grid/count, social dialogs, suggested users, and optimistic follow updates. Block 6 adds complete post creation, media viewing, and owner-only editing.
+Premium, dark-first photo-sharing experience built on Next.js. **Blocks 1–5 and the Block 6 posts/media scope are complete.** Profiles include validated avatar/cover uploads, real social graph state, and a DB-backed post grid. Posts add multi-image creation, media viewing, owner-only editing/deletion, and a paginated feed. Likes, save, and comments remain later work.
 
 ## Stack
 
@@ -61,7 +61,7 @@ Open <http://localhost:3000>. Every route — the landing page, design system, a
 | `/posts`, `/post/[postId]` | Post feed and detail (Block 6) |
 | `/privacy`, `/terms`, `/contact` | Honest placeholder pages so footer links resolve |
 
-> **Credential status:** all auth and profile routes are implemented locally; real signup, profile queries, follow mutations, and email delivery require the values in `.env.local`. No remote migration was applied from this environment. See [`docs/BACKEND.md`](docs/BACKEND.md) and [`docs/PROFILES.md`](docs/PROFILES.md).
+> **Credential status:** all auth, profile, and post routes are implemented locally; real signup, data queries, uploads, follow/post mutations, and email delivery require the values in `.env.local`. No remote migration was applied from this environment. See [`docs/BACKEND.md`](docs/BACKEND.md) and [`docs/PROFILES.md`](docs/PROFILES.md).
 
 > **Future evaluation:** an approved, not-started spike will assess a Neon-primary setup with GitDB as an offline fallback when the database is unreachable. It is not part of Block 6 and does not change the current stack. See [`docs/GITDB_MIGRATION_SPIKE.md`](docs/GITDB_MIGRATION_SPIKE.md).
 
@@ -148,5 +148,6 @@ public/               Static assets
 - [x] Validated avatar/cover uploads, social dialogs, suggestions, optimistic follow updates, and a real profile post grid/count
 - [x] Typecheck, lint, build, and dev server verification
 - [ ] Remote Neon/Supabase integration verified with real credentials (deployment step)
-- [ ] Complete post creation, media viewer, editing, and feed (Block 6)
-- [ ] Likes, comments, stories, messaging, notifications, explore, recommendations (later blocks)
+- [x] Multi-image post creation, media viewer, owner-only editing/deletion, and paginated feed (Block 6 posts/media)
+- [ ] Likes, save, and comments (later Block 6 work)
+- [ ] Stories, messaging, notifications, explore, recommendations (later blocks)

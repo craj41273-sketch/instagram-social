@@ -33,6 +33,11 @@ export const IMAGE_LIMITS = {
   MAX_POST_MEDIA: 10,
 } as const;
 
+/** Multipart overhead allowance for the maximum ten-image post request. */
+export const MAX_POST_REQUEST_BYTES =
+  IMAGE_LIMITS.POST_MEDIA_BYTES * IMAGE_LIMITS.MAX_POST_MEDIA +
+  4 * 1024 * 1024;
+
 export interface UploadedFileMetadata {
   name: string;
   type: string;

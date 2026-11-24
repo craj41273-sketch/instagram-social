@@ -112,6 +112,11 @@ are not skipped. Counts come from indexed scalar queries, not constants.
   sends only a validated target username and intent. Self-follows are rejected
   and duplicate follows are absorbed by the database unique constraint.
 - `app/actions/social.ts` loads additional public follow pages for dialogs.
+- `app/api/posts/route.ts` accepts authenticated multipart uploads. It requires a
+  same-origin `Origin`, derives identity from the session, revalidates every
+  image, and rolls back both storage objects and DB rows if metadata writes fail.
+- `app/actions/posts.ts` edits and deletes only posts owned by the session user;
+  no owner ID is accepted from the client.
 - Follow buttons use `useOptimistic` for instant feedback; the server result is
   the source of truth and failures restore the confirmed state.
 
@@ -163,10 +168,11 @@ the service-role key is not used for uploads.
 ## Tests and limitations
 
 `npm test` covers schema constraints, validation, SQL parameterization, cursors,
-storage path safety, image sniffing, hashtag normalization, migration safety,
-route protection, and safe display helpers. A real Neon integration test is
-skipped unless `LUMA_DB_INTEGRATION=1` and `DATABASE_URL` point to an
-already-migrated test database.
+storage path safety, image sniffing, hashtag normalization, caption rendering,
+same-origin writes, post media hints, migration safety, route protection, and
+safe display helpers. A real Neon integration test is skipped unless
+`LUMA_DB_INTEGRATION=1` and `DATABASE_URL` point to an already-migrated test
+database.
 
 Known limitations:
 
@@ -174,3 +180,4 @@ Known limitations:
 - Supabase buckets/policies must be created before real uploads work.
 - The in-memory rate limiter is per process.
 - Tagged media remains an honest empty state until tagging exists.
+- Likes, save state, and comments/replies are not part of this posts/media scope.
