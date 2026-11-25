@@ -1,0 +1,39 @@
+import { sql, type SQL } from "drizzle-orm";
+import { follows, posts, profiles, users } from "@/lib/db/schema";
+import { containsPattern } from "@/lib/discovery/search";
+import { TRENDING_WINDOW_DAYS } from "@/lib/discovery/ranking";
+
+/**
+ * Reusable predicates for discovery queries. The search text is always bound
+ * as a parameter; the fixed ESCAPE clause makes %, _, and \ literal text.
+ */
+
+export const TAG_WINDOW_DAYS = 90;
+
+export function buildPeopleSearchCondition(query: string): SQL {
+  const pattern = containsPattern(query);
+  return sql`(lower(${users.username}) LIKE lower(${pattern}) ESCAPE E'\\\\'
+    OR lower(coalesce(${profiles.displayName}, '')) LIKE lower(${pattern}) ESCAPE E'\\\\')`;
+}
+
+export function buildPostSearchCondition(query: string): SQL {
+  const pattern = containsPattern(query);
+  return sql`lower(${posts.caption}) LIKE lower(${pattern}) ESCAPE E'\\\\'`;
+}
+
+export function buildTrendingCondition(): SQL {
+  return sql`${posts.createdAt} >= now() - (${TRENDING_WINDOW_DAYS} * interval '1 day')`;
+}
+
+export function buildRecentTagCondition(): SQL {
+  return sql`${posts.createdAt} >= now() - (${TAG_WINDOW_DAYS} * interval '1 day')`;
+}
+
+/** Real suggestions exclude self and any existing follow edge. */
+export function buildSuggestedUsersCondition(viewerUserId: string): SQL {
+  return sql`${users.id} <> ${viewerUserId}
+    and not exists (
+      select 1 from ${follows} f
+      where f.follower_id = ${viewerUserId} and f.following_id = ${users.id}
+    )`;
+}

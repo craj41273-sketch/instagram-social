@@ -38,6 +38,10 @@ export const users = pgTable(
     // Defense in depth: case-insensitive uniqueness even if a future writer
     // bypasses the shared normalization schema.
     uniqueIndex("users_username_ci_idx").on(sql`lower(${table.username})`),
+    index("users_username_trgm_idx").using(
+      "gin",
+      sql`lower(${table.username}) gin_trgm_ops`,
+    ),
     index("users_email_idx").on(table.email),
   ],
 );
@@ -66,6 +70,10 @@ export const profiles = pgTable(
   (table) => [
     uniqueIndex("profiles_user_id_idx").on(table.userId),
     index("profiles_created_at_idx").on(table.createdAt),
+    index("profiles_display_name_trgm_idx").using(
+      "gin",
+      sql`lower(${table.displayName}) gin_trgm_ops`,
+    ),
   ],
 );
 
@@ -124,6 +132,10 @@ export const posts = pgTable(
     index("posts_user_id_idx").on(table.userId),
     index("posts_user_created_idx").on(table.userId, table.createdAt),
     index("posts_created_at_idx").on(table.createdAt),
+    index("posts_caption_trgm_idx").using(
+      "gin",
+      sql`lower(${table.caption}) gin_trgm_ops`,
+    ),
     check("posts_caption_length_check", sql`length(${table.caption}) <= 2200`),
   ],
 );

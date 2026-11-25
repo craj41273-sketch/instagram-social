@@ -113,20 +113,35 @@ Status legend: `[x]` complete, `[~]` in progress, `[ ]` planned.
 
 > Migration `drizzle/0004_watery_psynapse.sql` is additive and reviewed but unapplied from this environment. The in-process rate limiter is per-process; a shared store is needed for multi-instance deployments. Save state, double-tap likes, Explore, Stories, Reels, Messaging, Notifications, recommendations, and ads are out of scope.
 
-## Block 8 — Stories and notifications
+## Block 8 — Explore, search, discover people, and trending (complete locally)
+
+- [x] `/explore` public photo grid using real posts/media, responsive tiles, lazy loading, accessible descriptions, hover/focus affordances, cursor pagination, and loading/empty/error states
+- [x] Hashtag category filters derived from real `post_hashtags` data with an honest no-categories state
+- [x] Debounced authenticated `/search` with clear control, All/People/Posts tabs, 300 ms debounce, bounded offset paging, loading/empty/error/retry states, and safe result fields
+- [x] Reusable Zod-validated Drizzle services for people search, caption search, discover suggestions, explore feed reuse, real hashtags, and trending posts
+- [x] Discover people excludes the viewer and existing follows, reusing `getSuggestedUsers`, `UserList`, and the existing secure `FollowButton`
+- [x] Explainable trending score `(3 × likes + 2 × comments) / (age in hours + 2)` over a bounded 200-post/30-day candidate set; zero-engagement posts are excluded
+- [x] Additive `pg_trgm` GIN indexes for lowercased username, display name, and caption; no data reset or destructive migration
+- [x] Structural/unit tests for validation, wildcard escaping, parameterized SQL, exclusions, ranking, indexes, post access, and follow reuse
+- [ ] Real Neon/Supabase search, follow, and trending lifecycle tests with credentials
+- [ ] Real browser visual checks at 320/375/430/768/1024/1440 px (no browser automation available here)
+
+> Migrations `drizzle/0004_watery_psynapse.sql` and `drizzle/0005_spooky_mach_iv.sql` are additive and reviewed but unapplied from this environment. Search rate limiting is an authenticated per-process preparation layer; a shared store is required for multi-instance deployments. Stories, messaging, notifications, recommendations, and ads remain out of scope.
+
+## Block 9 — Stories and notifications
 
 - [ ] Story creation, expiry, and viewer tracking
 - [ ] Story ring and viewer UI
 - [ ] Notification generation and inbox
 
-## Block 9 — Messaging and realtime
+## Block 10 — Messaging and realtime
 
 - [ ] Conversation and message schema
 - [ ] Realtime message delivery
 - [ ] Typing indicators and presence
 - [ ] Unread counts
 
-## Block 10 — Polish and hardening
+## Block 11 — Polish and hardening
 
 - [ ] Dark/light refinements and responsive audit
 - [ ] Image optimization and accessibility audit
@@ -134,7 +149,7 @@ Status legend: `[x]` complete, `[~]` in progress, `[ ]` planned.
 - [ ] Error monitoring and structured logging
 - [ ] Automated tests and CI
 
-## Block 11 — Launch
+## Block 12 — Launch
 
 - [ ] Production environment configuration
 - [ ] Performance budget and build verification

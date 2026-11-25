@@ -1,8 +1,9 @@
 import "server-only";
-import { and, asc, eq, ilike, ne, sql } from "drizzle-orm";
+import { and, asc, eq, ilike, ne } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/lib/db";
-import { follows, profiles, users } from "@/lib/db/schema";
+import { buildSuggestedUsersCondition } from "@/lib/db/discovery-query";
+import { profiles, users } from "@/lib/db/schema";
 import { DatabaseError } from "@/lib/errors";
 import { logServerError } from "@/lib/logging";
 import { userSearchQuerySchema } from "@/lib/validations/profile";
@@ -79,8 +80,8 @@ function escapeLike(value: string): string {
 }
 
 /**
- * Real, unfollowed accounts ordered by existing follower count. The viewer ID
- * always comes from the DAL and is never accepted from the request.
+ * Real, unfollowed accounts ordered by username. The viewer ID always comes
+ * from the DAL and is never accepted from the request.
  */
 export async function getSuggestedUsers(
   viewerUserId: string,
@@ -101,15 +102,7 @@ export async function getSuggestedUsers(
       })
       .from(users)
       .leftJoin(profiles, eq(profiles.userId, users.id))
-      .where(
-        and(
-          ne(users.id, parsed.data),
-          sql`not exists (
-            select 1 from ${follows} f
-            where f.follower_id = ${parsed.data} and f.following_id = ${users.id}
-          )`,
-        ),
-      )
+      .where(buildSuggestedUsersCondition(parsed.data))
       .orderBy(asc(users.username))
       .limit(safeLimit);
 

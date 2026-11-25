@@ -4,7 +4,7 @@ import { Brand } from "@/components/shared/brand";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
 import { PageContainer } from "@/components/layout/page-container";
 
-/** Lightweight shell for public profiles and owner-only profile settings. */
+/** Responsive shell for profiles, posts, explore, and search. */
 export default function SocialLayout({ children }: { children: ReactNode }) {
   return (
     <>
@@ -17,13 +17,20 @@ export default function SocialLayout({ children }: { children: ReactNode }) {
           >
             <Brand />
           </Link>
-          <nav aria-label="Social navigation" className="flex items-center gap-3 sm:gap-4">
-            <Link
-              href="/posts"
-              className="rounded-md px-2 py-1 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
-            >
-              Posts
-            </Link>
+          <nav aria-label="Social navigation" className="flex min-w-0 items-center gap-1 sm:gap-3">
+            {[
+              { href: "/explore", label: "Explore" },
+              { href: "/search", label: "Search" },
+              { href: "/posts", label: "Posts" },
+            ].map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="rounded-md px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring sm:px-2 sm:text-sm"
+              >
+                {link.label}
+              </Link>
+            ))}
             <ThemeToggle />
           </nav>
         </PageContainer>

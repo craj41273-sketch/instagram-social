@@ -1,6 +1,6 @@
 # Luma
 
-Premium, dark-first photo-sharing experience built on Next.js. **Blocks 1–7 are complete locally.** Profiles include validated avatar/cover uploads, real social graph state, and a DB-backed post grid. Posts add multi-image creation, media viewing, owner-only editing/deletion, and a paginated feed. Block 7 adds a self/following social feed, database-backed likes, comments, and a post detail conversation. Remote Neon/Supabase verification still requires real credentials.
+Premium, dark-first photo-sharing experience built on Next.js. **Blocks 1–8 are complete locally.** Profiles include validated avatar/cover uploads, real social graph state, and a DB-backed post grid. Posts add multi-image creation, media viewing, owner-only editing/deletion, and a paginated feed. Block 7 adds a self/following social feed, database-backed likes, comments, and a post detail conversation. Block 8 adds a real-photo Explore grid, debounced global search, discover-people suggestions, and explainable trending. Remote Neon/Supabase verification still requires real credentials.
 
 ## Stack
 
@@ -59,6 +59,9 @@ Open <http://localhost:3000>. Every route — the landing page, design system, a
 | `/profile/edit` | Authenticated, owner-only profile editor with avatar/cover uploads |
 | `/api/users/search` | Authenticated, rate-limited username lookup foundation |
 | `/posts` | Authenticated self/following feed (public recent posts when signed out), hashtag filter, cursor Load More, and follow/create empty state |
+| `/explore` | Public photo grid with real hashtag filters, cursor pagination, explainable trending, and discover-people suggestions |
+| `/search` | Authenticated people/caption search with debouncing, tabs, bounded results, and retry states |
+| `/api/search` | Authenticated, rate-limited combined/person/post search JSON endpoint |
 | `/post/[postId]` | Post detail with like state, paginated comments, owner-only comment deletion, and loading/error states |
 | `/privacy`, `/terms`, `/contact` | Honest placeholder pages so footer links resolve |
 
@@ -99,8 +102,9 @@ Copy `.env.example` to `.env.local` and fill in real values. `.env*` files are i
 ```text
 app/(site)/           Marketing shell: landing, design system, policy pages
 app/(auth)/           Focused shell: login, signup, recovery, verification
-app/(social)/         Public profiles, owner editor, social lists, post routes
+app/(social)/         Public profiles, owner editor, social lists, post, explore, and search routes
 app/actions/          Authentication, profile, media, follow, post, and engagement actions
+app/api/search        Authenticated global search endpoint
 app/api/users/search  Authenticated username lookup foundation
 app/auth/             Supabase callback and OTP confirmation handlers
 app/                  Root providers, global styles, error/loading/not-found
@@ -111,8 +115,10 @@ components/ui/        shadcn/ui primitives + app-wide wrappers
 components/layout/    Header, footer, page container, info-page template
 components/shared/    Brand, theme, states, media, identity components
 components/profile/   Profile header, avatar, stats, tabs, lists, forms, actions
+components/discovery/ Explore grid, trending strip, debounced search experience
 lib/auth/             Supabase clients, DAL, identity mapping, constants
-lib/db/               Drizzle client, schema, profile/follow/post/engagement ops, parameterized SQL
+lib/db/               Drizzle client, schema, profile/follow/post/engagement/discovery ops, parameterized SQL
+lib/discovery/        Shared discovery types, LIKE escaping, explainable trending ranking
 lib/profile/          Profile action state, display helpers, list loading
 lib/posts/            Pure caption/hashtag helpers
 lib/pagination.ts     Bounded cursors for social graph and post lists
@@ -139,6 +145,17 @@ public/               Static assets
 - **Security:** no client user IDs are trusted; inputs are validated with Zod, SQL values are parameterized, actions are rate-limited, and failures return safe generic messages. The rate limiter is per-process only.
 - **Migrations:** `drizzle/0004_watery_psynapse.sql` is additive and was reviewed but **not applied** from this environment because Neon credentials are unavailable. Remote integration tests are opt-in via `LUMA_DB_INTEGRATION=1` and `DATABASE_URL`; unit tests run with `npm test`.
 
+## Block 8 behavior
+
+- **Explore:** `/explore` is public and uses `listRecentPosts` for a square, lazy-loaded media grid with cursor Load More, real hashtag filters from `post_hashtags`, skeletons, and honest empty/error states. Every tile opens the existing `/post/[postId]` detail route.
+- **Search:** `/search` debounces input by 300 ms, validates 2–50 character terms client and server side, and calls the authenticated `/api/search` endpoint. Tabs switch between All, People, and Posts; each section is capped at 12 rows per request with bounded offset pagination.
+- **Discover people:** the existing `getSuggestedUsers` service excludes the current user and already-followed users; rows reuse `UserList` and the existing `FollowButton` action, so no second social graph exists.
+- **Trending:** a bounded 200-post/30-day candidate set is ranked in JS by `(3 × likes + 2 × comments) / (age in hours + 2)`. Posts with zero real engagement are excluded; the formula and per-post counts are visible in the UI. No AI, fabricated activity, or paid signals are used.
+- **Indexes:** `drizzle/0005_spooky_mach_iv.sql` adds `pg_trgm` GIN indexes on lowercased username, display name, and caption. It is additive and was reviewed but **not applied** from this environment because Neon credentials are unavailable.
+- **Security:** identity comes from the Supabase DAL, no client user IDs are accepted, search text is normalized/validated with Zod and bound as SQL parameters with explicit `ESCAPE`, and requests are rate-limited per authenticated user. The limiter is still per-process; a shared store is needed for multi-instance deployments.
+- **Not included:** recent-search persistence, AI recommendations, and browser-driven responsive screenshots. Search state is shareable through `/search?q=...`; responsive behavior was checked structurally with Tailwind breakpoints, not via screenshots.
+- **Verification:** unit/structural tests cover validation, escaping, parameterized conditions, exclusion logic, ranking, indexes, and reuse of existing post/follow paths.
+
 ## Current status
 
 - [x] Next.js App Router + TypeScript strict mode
@@ -162,5 +179,8 @@ public/               Static assets
 - [x] DB-backed likes/unlikes with unique pairs, session-derived identity, and rollback-safe optimistic UI
 - [x] DB-backed comments with validation, pagination, counts, and owner-only deletion
 - [x] Loading, empty, error, and post-detail states for feed and engagement
+- [x] Explore grid, hashtag filters, cursor pagination, discover people, and explainable trending (Block 8)
+- [x] Debounced authenticated search with People/Posts tabs, bounded offsets, and safe projections (Block 8)
+- [x] Additive trigram index migration and discovery unit/structural tests (Block 8)
 - [ ] Save state (not requested in Block 7)
-- [ ] Stories, messaging, notifications, explore, recommendations (later blocks)
+- [ ] Stories, messaging, notifications, and recommendations (later blocks)
