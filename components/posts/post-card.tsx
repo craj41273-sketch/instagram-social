@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { MessageCircle } from "lucide-react";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
+import { LikeButton } from "@/components/posts/like-button";
 import { MediaViewer } from "@/components/posts/media-viewer";
 import { PostActions } from "@/components/posts/post-actions";
 import { PostCaption } from "@/components/posts/post-caption";
@@ -80,6 +82,43 @@ export function PostCard({
       {post.caption ? (
         <CardContent className="pb-1">
           <PostCaption caption={post.caption} />
+        </CardContent>
+      ) : null}
+
+      <CardContent className="flex flex-wrap items-center gap-4 pt-1">
+        <LikeButton
+          postId={post.id}
+          initialLiked={post.likedByViewer}
+          initialLikeCount={post.likeCount}
+          isAuthenticated={Boolean(viewerUserId)}
+          loginHref={`/login?next=${encodeURIComponent(`/post/${post.id}`)}`}
+        />
+        <Link
+          href={`/post/${post.id}#comments`}
+          aria-label={`View ${post.commentCount} comments`}
+          className="inline-flex items-center gap-2 rounded-md px-2 py-1 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+        >
+          <MessageCircle className="size-5" aria-hidden="true" />
+          <span>{post.commentCount}</span>
+        </Link>
+        {!detail ? (
+          <Link
+            href={`/post/${post.id}`}
+            className="ml-auto text-xs text-muted-foreground hover:text-primary focus-visible:outline-2 focus-visible:outline-ring"
+          >
+            View post
+          </Link>
+        ) : null}
+      </CardContent>
+
+      {!detail && post.commentPreviews.length > 0 ? (
+        <CardContent className="space-y-1 pt-0 text-xs text-muted-foreground">
+          {post.commentPreviews.map((preview) => (
+            <p key={preview.id} className="truncate">
+              <span className="font-medium text-foreground">@{preview.username}</span>{" "}
+              {preview.content}
+            </p>
+          ))}
         </CardContent>
       ) : null}
 

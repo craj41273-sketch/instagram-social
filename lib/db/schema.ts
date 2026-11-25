@@ -181,6 +181,54 @@ export const postHashtags = pgTable(
   ],
 );
 
+/** One real like per (user, post) pair; counts are always derived from rows. */
+export const postLikes = pgTable(
+  "post_likes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    postId: uuid("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("post_likes_user_post_unique").on(table.userId, table.postId),
+    index("post_likes_post_idx").on(table.postId),
+    index("post_likes_user_idx").on(table.userId),
+  ],
+);
+
+/** Text-only comments; React renders content as plain text, never as HTML. */
+export const comments = pgTable(
+  "comments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    postId: uuid("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("comments_post_created_idx").on(table.postId, table.createdAt, table.id),
+    index("comments_user_idx").on(table.userId),
+    check("comments_content_length_check", sql`length(${table.content}) between 1 and 1000`),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Profile = typeof profiles.$inferSelect;
@@ -193,3 +241,7 @@ export type PostMedia = typeof postMedia.$inferSelect;
 export type NewPostMedia = typeof postMedia.$inferInsert;
 export type PostHashtag = typeof postHashtags.$inferSelect;
 export type NewPostHashtag = typeof postHashtags.$inferInsert;
+export type PostLike = typeof postLikes.$inferSelect;
+export type NewPostLike = typeof postLikes.$inferInsert;
+export type Comment = typeof comments.$inferSelect;
+export type NewComment = typeof comments.$inferInsert;

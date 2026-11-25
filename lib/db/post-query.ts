@@ -48,3 +48,22 @@ export const postCursorTimestamp = sql<string>`to_char(
 export function buildPostOwnerCondition(userId: string): SQL {
   return eq(posts.userId, userId);
 }
+
+/**
+ * Authenticated feed scope: own posts plus posts from followed accounts.
+ * Identity is always supplied by the session-derived caller, never a client.
+ */
+export function buildSocialFeedCondition(
+  viewerUserId: string,
+  cursor: PageCursor | null,
+  tag?: string | null,
+): SQL {
+  const scope = sql`
+    ("posts"."user_id" = ${viewerUserId} or exists (
+      select 1 from "follows" f
+      where f."follower_id" = ${viewerUserId}
+        and f."following_id" = "posts"."user_id"
+    ))
+  `;
+  return buildPostPageCondition(scope, cursor, tag);
+}

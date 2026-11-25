@@ -1,6 +1,6 @@
 # Luma
 
-Premium, dark-first photo-sharing experience built on Next.js. **Blocks 1–5 and the Block 6 posts/media scope are complete.** Profiles include validated avatar/cover uploads, real social graph state, and a DB-backed post grid. Posts add multi-image creation, media viewing, owner-only editing/deletion, and a paginated feed. Likes, save, and comments remain later work.
+Premium, dark-first photo-sharing experience built on Next.js. **Blocks 1–7 are complete locally.** Profiles include validated avatar/cover uploads, real social graph state, and a DB-backed post grid. Posts add multi-image creation, media viewing, owner-only editing/deletion, and a paginated feed. Block 7 adds a self/following social feed, database-backed likes, comments, and a post detail conversation. Remote Neon/Supabase verification still requires real credentials.
 
 ## Stack
 
@@ -58,7 +58,8 @@ Open <http://localhost:3000>. Every route — the landing page, design system, a
 | `/profile/[username]/followers`, `/following` | Cursor-paginated social graph lists |
 | `/profile/edit` | Authenticated, owner-only profile editor with avatar/cover uploads |
 | `/api/users/search` | Authenticated, rate-limited username lookup foundation |
-| `/posts`, `/post/[postId]` | Post feed and detail (Block 6) |
+| `/posts` | Authenticated self/following feed (public recent posts when signed out), hashtag filter, cursor Load More, and follow/create empty state |
+| `/post/[postId]` | Post detail with like state, paginated comments, owner-only comment deletion, and loading/error states |
 | `/privacy`, `/terms`, `/contact` | Honest placeholder pages so footer links resolve |
 
 > **Credential status:** all auth, profile, and post routes are implemented locally; real signup, data queries, uploads, follow/post mutations, and email delivery require the values in `.env.local`. No remote migration was applied from this environment. See [`docs/BACKEND.md`](docs/BACKEND.md) and [`docs/PROFILES.md`](docs/PROFILES.md).
@@ -99,7 +100,7 @@ Copy `.env.example` to `.env.local` and fill in real values. `.env*` files are i
 app/(site)/           Marketing shell: landing, design system, policy pages
 app/(auth)/           Focused shell: login, signup, recovery, verification
 app/(social)/         Public profiles, owner editor, social lists, post routes
-app/actions/          Authentication, profile, media, follow, and post actions
+app/actions/          Authentication, profile, media, follow, post, and engagement actions
 app/api/users/search  Authenticated username lookup foundation
 app/auth/             Supabase callback and OTP confirmation handlers
 app/                  Root providers, global styles, error/loading/not-found
@@ -111,7 +112,7 @@ components/layout/    Header, footer, page container, info-page template
 components/shared/    Brand, theme, states, media, identity components
 components/profile/   Profile header, avatar, stats, tabs, lists, forms, actions
 lib/auth/             Supabase clients, DAL, identity mapping, constants
-lib/db/               Drizzle client, schema, profile/follow/post ops, parameterized SQL
+lib/db/               Drizzle client, schema, profile/follow/post/engagement ops, parameterized SQL
 lib/profile/          Profile action state, display helpers, list loading
 lib/posts/            Pure caption/hashtag helpers
 lib/pagination.ts     Bounded cursors for social graph and post lists
@@ -129,6 +130,14 @@ types/                Shared TypeScript types
 docs/                 Architecture, backend, profiles, coding standards, design system
 public/               Static assets
 ```
+
+## Block 7 behavior
+
+- **Feed:** `/posts` shows the signed-in user's posts plus posts from followed accounts, newest first (`created_at`, `id` keyset). Anonymous visitors keep the public recent-post feed. Both pages use the same reusable `PostCard` with author/media/caption/timestamp, likes, comment counts, up to two comment previews, and profile/detail links.
+- **Likes:** `post_likes` has a unique `(user_id, post_id)` index and cascading foreign keys. Actions derive identity from the Supabase session, check post existence, insert idempotently, and return DB-derived like state. The client applies a reversible optimistic update and rolls back on failure; duplicate requests are blocked while pending.
+- **Comments:** `comments` stores bounded text with cascading foreign keys, indexes for post paging, and a DB length check. Creation is Zod-validated (1–1000 trimmed characters), rendered as plain text, and deletion is owner-only. Detail comments are newest-first and cursor-paginated via a Load More link.
+- **Security:** no client user IDs are trusted; inputs are validated with Zod, SQL values are parameterized, actions are rate-limited, and failures return safe generic messages. The rate limiter is per-process only.
+- **Migrations:** `drizzle/0004_watery_psynapse.sql` is additive and was reviewed but **not applied** from this environment because Neon credentials are unavailable. Remote integration tests are opt-in via `LUMA_DB_INTEGRATION=1` and `DATABASE_URL`; unit tests run with `npm test`.
 
 ## Current status
 
@@ -149,5 +158,9 @@ public/               Static assets
 - [x] Typecheck, lint, build, and dev server verification
 - [ ] Remote Neon/Supabase integration verified with real credentials (deployment step)
 - [x] Multi-image post creation, media viewer, owner-only editing/deletion, and paginated feed (Block 6 posts/media)
-- [ ] Likes, save, and comments (later Block 6 work)
+- [x] Self/following social feed, reusable post cards with like/comment counts and previews (Block 7)
+- [x] DB-backed likes/unlikes with unique pairs, session-derived identity, and rollback-safe optimistic UI
+- [x] DB-backed comments with validation, pagination, counts, and owner-only deletion
+- [x] Loading, empty, error, and post-detail states for feed and engagement
+- [ ] Save state (not requested in Block 7)
 - [ ] Stories, messaging, notifications, explore, recommendations (later blocks)

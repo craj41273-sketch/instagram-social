@@ -92,8 +92,10 @@ Block 4 implemented `users` and `profiles`; the expanded Block 5 added profile
 `post_media`, and `post_hashtags` metadata tables, all with additive migrations
 in `drizzle/`. Media bytes live in Supabase Storage; Neon stores validated
 metadata, ownership, ordering, and constraints. Block 6 completes the
-post/media UI and lifecycle. Later blocks add `likes`, `comments`, `stories`,
-`story_views`, `conversations`, `messages`, `notifications`, and `saved_posts`.
+post/media UI and lifecycle. Block 7 adds `post_likes` and `comments` with
+session-derived ownership and DB-derived counts. Later blocks may add
+`stories`, `story_views`, `conversations`, `messages`, `notifications`, and
+`saved_posts`.
 
 Neon is the only application database. Supabase Auth owns identity; its own
 Postgres is not used as a second app database. Application-level authorization

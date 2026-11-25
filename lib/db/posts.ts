@@ -1,15 +1,19 @@
 import "server-only";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import {
+  comments,
   postHashtags,
   postMedia,
   posts,
+  profiles,
+  users,
   type NewPostMedia,
 } from "@/lib/db/schema";
 import {
   buildPostPageCondition,
   buildPostPageOrder,
+  buildSocialFeedCondition,
   postCursorTimestamp,
 } from "@/lib/db/post-query";
 import { parseUserId } from "@/lib/db/profile-sql";
@@ -51,6 +55,14 @@ export interface PublicPostAuthor {
   avatarUrl: string | null;
 }
 
+export interface CommentPreview {
+  id: string;
+  username: string;
+  displayName: string;
+  content: string;
+  createdAt: string;
+}
+
 export interface PublicPost {
   id: string;
   author: PublicPostAuthor;
@@ -59,6 +71,10 @@ export interface PublicPost {
   createdAt: string;
   updatedAt: string;
   media: PublicPostMedia[];
+  likeCount: number;
+  likedByViewer: boolean;
+  commentCount: number;
+  commentPreviews: CommentPreview[];
 }
 
 export interface PublicPostPage {
@@ -310,6 +326,43 @@ async function loadHashtagsForPosts(postIds: string[]): Promise<Map<string, stri
   return map;
 }
 
+/** Bounded newest-comment previews, batched for a whole feed page. */
+async function loadCommentPreviews(
+  postIds: string[],
+): Promise<Map<string, CommentPreview[]>> {
+  const map = new Map<string, CommentPreview[]>();
+  if (postIds.length === 0) return map;
+
+  const rows = await getDb()
+    .select({
+      postId: comments.postId,
+      id: comments.id,
+      content: comments.content,
+      createdAt: comments.createdAt,
+      username: users.username,
+      displayName: profiles.displayName,
+    })
+    .from(comments)
+    .innerJoin(users, eq(users.id, comments.userId))
+    .leftJoin(profiles, eq(profiles.userId, users.id))
+    .where(inArray(comments.postId, postIds))
+    .orderBy(asc(comments.postId), desc(comments.createdAt), desc(comments.id));
+
+  for (const row of rows) {
+    const list = map.get(row.postId) ?? [];
+    if (list.length >= 2) continue;
+    list.push({
+      id: row.id,
+      username: row.username,
+      displayName: row.displayName ?? row.username,
+      content: row.content,
+      createdAt: toIso(row.createdAt),
+    });
+    map.set(row.postId, list);
+  }
+  return map;
+}
+
 interface PostWithAuthorRow extends RawRow {
   post_id: string;
   caption: string;
@@ -319,12 +372,16 @@ interface PostWithAuthorRow extends RawRow {
   username: string;
   display_name: string | null;
   avatar_url: string | null;
+  like_count: number | string;
+  comment_count: number | string;
+  liked_by_viewer: boolean;
 }
 
 function toPublicPost(
   row: PostWithAuthorRow,
   media: PublicPostMedia[],
   hashtags: string[],
+  previews: CommentPreview[] = [],
 ): PublicPost {
   return {
     id: row.post_id,
@@ -339,19 +396,36 @@ function toPublicPost(
     createdAt: toIso(row.cursor),
     updatedAt: toIso(row.updated_at),
     media: media.slice().sort((a, b) => a.position - b.position),
+    likeCount: numeric(row.like_count),
+    likedByViewer: row.liked_by_viewer === true,
+    commentCount: numeric(row.comment_count),
+    commentPreviews: previews,
   };
 }
 
-const POST_AUTHOR_COLUMNS = sql`
-  "posts"."id" AS post_id,
-  "posts"."caption" AS caption,
-  ${postCursorTimestamp} AS cursor,
-  "posts"."updated_at" AS updated_at,
-  u."id" AS author_id,
-  u."username" AS username,
-  p."display_name" AS display_name,
-  p."avatar_url" AS avatar_url
-`;
+/** Counts and viewer like state stay in the database projection, never client state. */
+function postAuthorColumns(viewerUserId: string | null): SQL {
+  return sql`
+    "posts"."id" AS post_id,
+    "posts"."caption" AS caption,
+    ${postCursorTimestamp} AS cursor,
+    "posts"."updated_at" AS updated_at,
+    u."id" AS author_id,
+    u."username" AS username,
+    p."display_name" AS display_name,
+    p."avatar_url" AS avatar_url,
+    (SELECT count(*)::int FROM "post_likes" pl WHERE pl."post_id" = "posts"."id") AS like_count,
+    (SELECT count(*)::int FROM "comments" c WHERE c."post_id" = "posts"."id") AS comment_count,
+    ${
+      viewerUserId
+        ? sql`exists (
+            SELECT 1 FROM "post_likes" vl
+            WHERE vl."post_id" = "posts"."id" AND vl."user_id" = ${viewerUserId}
+          )`
+        : sql`false`
+    } AS liked_by_viewer
+  `;
+}
 
 const POST_AUTHOR_JOIN = sql`
   FROM "posts"
@@ -359,13 +433,58 @@ const POST_AUTHOR_JOIN = sql`
   LEFT JOIN "profiles" p ON p."user_id" = u."id"
 `;
 
-/** One post with its author, ordered media, and normalized hashtags. */
-export async function getPublicPostById(postId: string): Promise<PublicPost | null> {
+async function loadPostPage(
+  condition: SQL,
+  limit: number,
+  viewerUserId: string | null,
+): Promise<PublicPostPage> {
+  const result = await getDb().execute<PostWithAuthorRow>(sql`
+    SELECT ${postAuthorColumns(viewerUserId)}
+    ${POST_AUTHOR_JOIN}
+    WHERE ${condition}
+    ORDER BY ${buildPostPageOrder()}
+    LIMIT ${limit + 1}
+  `);
+
+  const rows = extractRows<PostWithAuthorRow>(result);
+  const hasMore = rows.length > limit;
+  const pageRows = rows.slice(0, limit);
+  const ids = pageRows.map((row) => row.post_id);
+  const [media, hashtags, previews] = await Promise.all([
+    loadMediaForPosts(ids),
+    loadHashtagsForPosts(ids),
+    loadCommentPreviews(ids),
+  ]);
+
+  const items = pageRows.map((row) =>
+    toPublicPost(
+      row,
+      media.get(row.post_id) ?? [],
+      hashtags.get(row.post_id) ?? [],
+      previews.get(row.post_id) ?? [],
+    ),
+  );
+  const lastRow = pageRows.at(-1);
+
+  return {
+    items,
+    nextCursor:
+      hasMore && lastRow
+        ? encodePageCursor({ createdAt: text(lastRow.cursor), id: text(lastRow.post_id) })
+        : null,
+  };
+}
+
+/** One post with author, media, hashtags, engagement, and comment previews. */
+export async function getPublicPostById(
+  postId: string,
+  viewerUserId: string | null = null,
+): Promise<PublicPost | null> {
   if (!parseUserId(postId)) return null;
 
   try {
     const result = await getDb().execute<PostWithAuthorRow>(sql`
-      SELECT ${POST_AUTHOR_COLUMNS}
+      SELECT ${postAuthorColumns(viewerUserId)}
       ${POST_AUTHOR_JOIN}
       WHERE "posts"."id" = ${postId}
       LIMIT 1
@@ -373,59 +492,69 @@ export async function getPublicPostById(postId: string): Promise<PublicPost | nu
     const row = extractRows<PostWithAuthorRow>(result)[0];
     if (!row) return null;
 
-    const [media, hashtags] = await Promise.all([
+    const [media, hashtags, previews] = await Promise.all([
       loadMediaForPosts([postId]),
       loadHashtagsForPosts([postId]),
+      loadCommentPreviews([postId]),
     ]);
 
-    return toPublicPost(row, media.get(postId) ?? [], hashtags.get(postId) ?? []);
+    return toPublicPost(
+      row,
+      media.get(postId) ?? [],
+      hashtags.get(postId) ?? [],
+      previews.get(postId) ?? [],
+    );
   } catch (error) {
     logServerError("db.getPublicPostById", error, { postId });
     throw new DatabaseError();
   }
 }
 
-/** Bounded feed page; an optional hashtag filters through post_hashtags. */
+/** Public recent-post feed used for anonymous visitors. */
 export async function listRecentPosts(
   options: { limit?: number; cursor?: string | null; tag?: string | null } = {},
 ): Promise<PublicPostPage> {
   const limit = safeLimit(options.limit, 12);
   const cursor = decodePageCursor(options.cursor);
   const tag = options.tag?.toLowerCase() || null;
-  const condition = buildPostPageCondition(sql`true`, cursor, tag);
 
   try {
-    const result = await getDb().execute<PostWithAuthorRow>(sql`
-      SELECT ${POST_AUTHOR_COLUMNS}
-      ${POST_AUTHOR_JOIN}
-      WHERE ${condition}
-      ORDER BY ${buildPostPageOrder()}
-      LIMIT ${limit + 1}
-    `);
-
-    const rows = extractRows<PostWithAuthorRow>(result);
-    const hasMore = rows.length > limit;
-    const pageRows = rows.slice(0, limit);
-    const ids = pageRows.map((row) => row.post_id);
-    const [media, hashtags] = await Promise.all([
-      loadMediaForPosts(ids),
-      loadHashtagsForPosts(ids),
-    ]);
-
-    const items = pageRows.map((row) =>
-      toPublicPost(row, media.get(row.post_id) ?? [], hashtags.get(row.post_id) ?? []),
+    return await loadPostPage(
+      buildPostPageCondition(sql`true`, cursor, tag),
+      limit,
+      null,
     );
-    const lastRow = pageRows.at(-1);
-
-    return {
-      items,
-      nextCursor:
-        hasMore && lastRow
-          ? encodePageCursor({ createdAt: text(lastRow.cursor), id: text(lastRow.post_id) })
-          : null,
-    };
   } catch (error) {
     logServerError("db.listRecentPosts", error, { tagLength: tag?.length ?? 0 });
+    throw new DatabaseError();
+  }
+}
+
+/** Authenticated feed: own posts and posts from followed users, newest first. */
+export async function listFeedPosts(
+  options: {
+    viewerUserId: string;
+    limit?: number;
+    cursor?: string | null;
+    tag?: string | null;
+  },
+): Promise<PublicPostPage> {
+  if (!parseUserId(options.viewerUserId)) {
+    throw new ValidationError("Invalid account identity.");
+  }
+
+  const limit = safeLimit(options.limit, 12);
+  const cursor = decodePageCursor(options.cursor);
+  const tag = options.tag?.toLowerCase() || null;
+
+  try {
+    return await loadPostPage(
+      buildSocialFeedCondition(options.viewerUserId, cursor, tag),
+      limit,
+      options.viewerUserId,
+    );
+  } catch (error) {
+    logServerError("db.listFeedPosts", error, { tagLength: tag?.length ?? 0 });
     throw new DatabaseError();
   }
 }

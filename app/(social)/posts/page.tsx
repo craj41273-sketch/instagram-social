@@ -1,15 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Images, Search } from "lucide-react";
+import { Images, Search, UserPlus } from "lucide-react";
 import { PageContainer } from "@/components/layout/page-container";
 import { CreatePostControl } from "@/components/posts/create-post-dialog";
 import { PostCard } from "@/components/posts/post-card";
+import { UserList } from "@/components/profile/user-list";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorState } from "@/components/shared/error-state";
 import { PremiumButton } from "@/components/ui/premium-button";
 import { Input } from "@/components/ui/input";
 import { getCurrentProfile } from "@/lib/auth/dal";
-import { listRecentPosts } from "@/lib/db/posts";
+import { listFeedPosts, listRecentPosts } from "@/lib/db/posts";
+import { getSuggestedUsers } from "@/lib/db/users";
 import { logServerError } from "@/lib/logging";
 import { postFeedQuerySchema } from "@/lib/validations/post";
 
@@ -22,7 +24,7 @@ interface PostsPageProps {
   searchParams: Promise<{ cursor?: string; limit?: string; tag?: string }>;
 }
 
-/** Public feed with real post rows, bounded paging, and hashtag filtering. */
+/** Authenticated self/following feed; anonymous visitors keep the public feed. */
 export default async function PostsPage({ searchParams }: PostsPageProps) {
   const parsedQuery = postFeedQuerySchema.safeParse(await searchParams);
   const query = parsedQuery.success
@@ -39,14 +41,30 @@ export default async function PostsPage({ searchParams }: PostsPageProps) {
   let page = null;
   let failed = false;
   try {
-    page = await listRecentPosts({
-      limit: query.limit,
-      cursor: query.cursor,
-      tag: query.tag,
-    });
+    page = viewer
+      ? await listFeedPosts({
+          viewerUserId: viewer.user.id,
+          limit: query.limit,
+          cursor: query.cursor,
+          tag: query.tag,
+        })
+      : await listRecentPosts({
+          limit: query.limit,
+          cursor: query.cursor,
+          tag: query.tag,
+        });
   } catch (error) {
     logServerError("posts.page.feed", error, { tagLength: query.tag?.length ?? 0 });
     failed = true;
+  }
+
+  let suggestions: Awaited<ReturnType<typeof getSuggestedUsers>> = [];
+  if (viewer && !failed && !query.tag && page?.items.length === 0) {
+    try {
+      suggestions = await getSuggestedUsers(viewer.user.id);
+    } catch (error) {
+      logServerError("posts.page.suggestions", error);
+    }
   }
 
   const nextParams = new URLSearchParams();
@@ -60,9 +78,9 @@ export default async function PostsPage({ searchParams }: PostsPageProps) {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-xs uppercase tracking-[0.18em] text-primary">The feed</p>
-          <h1 className="font-heading text-2xl tracking-tight sm:text-3xl">Recent posts</h1>
+          <h1 className="font-heading text-2xl tracking-tight sm:text-3xl">Your feed</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Every frame here comes from a real post and Supabase image upload.
+            Posts from you and the people you follow, newest first.
           </p>
         </div>
         <CreatePostControl isAuthenticated={Boolean(viewer)} />
@@ -109,22 +127,45 @@ export default async function PostsPage({ searchParams }: PostsPageProps) {
           }
         />
       ) : !page || page.items.length === 0 ? (
-        <EmptyState
-          icon={Images}
-          title={query.tag ? "No posts with that hashtag" : "No posts yet"}
-          description={
-            query.tag
-              ? "Try another hashtag or clear the filter to see the full feed."
-              : "When someone publishes a photo, it will appear here."
-          }
-          action={
-            query.tag ? (
-              <PremiumButton premiumVariant="outline" asChild>
-                <Link href="/posts">View all posts</Link>
-              </PremiumButton>
-            ) : undefined
-          }
-        />
+        <div className="space-y-6">
+          <EmptyState
+            icon={query.tag ? Images : UserPlus}
+            title={
+              query.tag
+                ? "No posts with that hashtag"
+                : viewer
+                  ? "Your feed starts here"
+                  : "No posts yet"
+            }
+            description={
+              query.tag
+                ? "Try another hashtag or clear the filter to see the full feed."
+                : viewer
+                  ? "Follow people you admire, then come back for their photos — or share your first post."
+                  : "When someone publishes a photo, it will appear here."
+            }
+            action={
+              query.tag ? (
+                <PremiumButton premiumVariant="outline" asChild>
+                  <Link href="/posts">View all posts</Link>
+                </PremiumButton>
+              ) : viewer ? (
+                <CreatePostControl isAuthenticated />
+              ) : undefined
+            }
+          />
+          {viewer && !query.tag && suggestions.length > 0 ? (
+            <section className="space-y-3">
+              <h2 className="font-heading text-lg">People to follow</h2>
+              <UserList
+                items={suggestions}
+                viewerUsername={viewer.user.username}
+                emptyTitle="No suggestions yet"
+                emptyDescription="Check back once more people have joined Luma."
+              />
+            </section>
+          ) : null}
+        </div>
       ) : (
         <div className="space-y-6">
           {page.items.map((post) => (

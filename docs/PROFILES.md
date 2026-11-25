@@ -2,8 +2,9 @@
 
 Block 5 provides real public profiles, a secure directed social graph, validated
 avatar/cover uploads, a database-backed post grid/count, social dialogs, and
-suggested accounts. Blocks 1–4 are preserved. Likes, comments, stories,
-messaging, and notifications remain out of scope.
+suggested accounts. Blocks 1–4 are preserved. Block 7 adds the social feed,
+likes, and comments; stories, messaging, notifications, and save state remain
+out of scope.
 
 ## Username authority
 
@@ -180,4 +181,4 @@ Known limitations:
 - Supabase buckets/policies must be created before real uploads work.
 - The in-memory rate limiter is per process.
 - Tagged media remains an honest empty state until tagging exists.
-- Likes, save state, and comments/replies are not part of this posts/media scope.
+- Likes and comments are implemented in Block 7 (`post_likes`, `comments`); save state and comment replies remain out of scope.

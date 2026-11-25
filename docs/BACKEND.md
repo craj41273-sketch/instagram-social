@@ -11,7 +11,7 @@ operations. Block 5 details live in `docs/PROFILES.md`.
 | --- | --- | --- |
 | UI | Next.js App Router, React, Tailwind | Existing Luma design system; no redesign |
 | Application logic | Server actions in `app/actions/`, services in `lib/` | Zod validation, rate limiting, safe errors |
-| Primary database | Neon PostgreSQL | App data: `users`, `profiles`, `follows`, `posts`, `post_media`, `post_hashtags` |
+| Primary database | Neon PostgreSQL | App data: `users`, `profiles`, `follows`, `posts`, `post_media`, `post_hashtags`, `post_likes`, `comments` |
 | ORM | Drizzle via `getDb()` | Lazy, cached `neon-http` client |
 | Identity provider | Supabase Auth | Sessions in HttpOnly-ish cookies via `@supabase/ssr` |
 | Storage | Supabase Storage | Validated owner-scoped uploads for avatars, covers, and post media |
@@ -63,18 +63,26 @@ Supabase Storage; Neon stores metadata URLs and constraints only.
   `(post_id, position)` plus positive-size/position CHECKs.
 - **post_hashtags**: `id` (UUID PK), `post_id` (FK → `posts.id`, cascade),
   normalized `tag`, `position`, `created_at`; unique `(post_id, tag)`.
+- **post_likes**: `id` (UUID PK), `user_id` (FK → `users.id`, cascade),
+  `post_id` (FK → `posts.id`, cascade), `created_at`; unique `(user_id, post_id)`
+  prevents duplicate likes.
+- **comments**: `id` (UUID PK), `post_id` (FK → `posts.id`, cascade), `user_id`
+  (FK → `users.id`, cascade), `content`, `created_at`, `updated_at`; length
+  CHECK (1–1000), `(post_id, created_at, id)` index for cursor paging.
 
 Indexes: unique indexes on `users.auth_user_id`, `users.username`,
-`lower(users.username)`, `profiles.user_id`, and
-`(follows.follower_id, follows.following_id)`; plain indexes on `users.email`,
-`profiles.created_at`, `follows.follower_id`, `follows.following_id`, and
-`follows.created_at`.
+`lower(users.username)`, `profiles.user_id`, `(follows.follower_id,
+follows.following_id)`, and `(post_likes.user_id, post_likes.post_id)`; plain
+indexes on `users.email`, `profiles.created_at`, `follows.follower_id`,
+`follows.following_id`, `follows.created_at`, `post_likes.post_id`,
+`post_likes.user_id`, `comments.user_id`, and
+`(comments.post_id, comments.created_at, comments.id)`.
 
 Usernames are normalized to lowercase by the shared Zod schema before any
 write. The `lower(username)` unique index is defense in depth.
 `users.username` is the only authoritative username column.
 
-Like, comment, story, message, and notification tables do not exist.
+Story, message, notification, and saved-post tables do not exist.
 
 ### Migrations
 
@@ -87,8 +95,9 @@ npm run db:push       # development-only schema push; avoid on shared/production
 
 Generated migrations: `drizzle/0000_nosy_zaran.sql` (Block 4),
 `drizzle/0001_high_quentin_quire.sql` (Block 5: `follows` + `location`),
-`drizzle/0002_posts_media.sql` (posts + media metadata), and
-`drizzle/0003_post_hashtags.sql` (normalized hashtags). All were generated
+`drizzle/0002_posts_media.sql` (posts + media metadata),
+`drizzle/0003_post_hashtags.sql` (normalized hashtags), and
+`drizzle/0004_watery_psynapse.sql` (Block 7 likes + comments). All were generated
 locally; they have **not** been applied to a remote database because no real
 Neon credentials were available. Apply them in order with `npm run db:migrate`
 after setting `DATABASE_URL`. Never run a destructive migration against a

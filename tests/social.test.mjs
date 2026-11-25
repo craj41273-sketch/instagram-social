@@ -7,8 +7,10 @@ import { eq, sql } from "drizzle-orm";
 import { PgDialect, getTableConfig } from "drizzle-orm/pg-core";
 
 import {
+  comments,
   follows,
   postHashtags,
+  postLikes,
   postMedia,
   posts,
   profiles,
@@ -21,6 +23,7 @@ import {
 import {
   buildPostPageCondition,
   buildPostPageOrder,
+  buildSocialFeedCondition,
 } from "@/lib/db/post-query.ts";
 import {
   buildUpdateProfileImageStatement,
@@ -59,8 +62,13 @@ import {
   userSearchQuerySchema,
 } from "@/lib/validations/profile.ts";
 import {
+  commentContentSchema,
+  commentPageQuerySchema,
+  createCommentSchema,
   createPostInputSchema,
+  deleteCommentSchema,
   editPostSchema,
+  likeActionSchema,
   postFeedQuerySchema,
   postMediaMetaListSchema,
 } from "@/lib/validations/post.ts";
@@ -491,6 +499,118 @@ test("media migrations are additive and contain ownership constraints", () => {
   assert.match(tagMigration, /post_hashtags_post_tag_unique/);
 });
 
+test("likes and comments tables enforce uniqueness, ownership, and cascade deletes", () => {
+  const likeConfig = getTableConfig(postLikes);
+  const commentConfig = getTableConfig(comments);
+  const likeIndexes = new Map(
+    likeConfig.indexes.map((item) => [item.config.name, item.config]),
+  );
+  const commentIndexes = new Map(
+    commentConfig.indexes.map((item) => [item.config.name, item.config]),
+  );
+
+  assert.equal(likeConfig.name, "post_likes");
+  assert.deepEqual(
+    likeConfig.columns.map((column) => column.name).sort(),
+    ["created_at", "id", "post_id", "user_id"],
+  );
+  assert.equal(likeIndexes.get("post_likes_user_post_unique")?.unique, true);
+  assert.deepEqual(
+    likeIndexes.get("post_likes_user_post_unique")?.columns.map((column) => column.name),
+    ["user_id", "post_id"],
+  );
+  assert.equal(likeIndexes.get("post_likes_post_idx")?.unique, false);
+  assert.equal(likeConfig.foreignKeys.length, 2);
+  for (const key of likeConfig.foreignKeys) {
+    assert.equal(key.onDelete, "cascade");
+  }
+
+  assert.equal(commentConfig.name, "comments");
+  assert.deepEqual(
+    commentConfig.columns.map((column) => column.name).sort(),
+    ["content", "created_at", "id", "post_id", "updated_at", "user_id"],
+  );
+  assert.equal(commentConfig.foreignKeys.length, 2);
+  for (const key of commentConfig.foreignKeys) {
+    assert.equal(key.onDelete, "cascade");
+  }
+  assert.deepEqual(
+    commentIndexes.get("comments_post_created_idx")?.columns.map((column) => column.name),
+    ["post_id", "created_at", "id"],
+  );
+  assert.ok(commentConfig.checks.some((item) => item.name === "comments_content_length_check"));
+});
+
+test("engagement migration is additive and preserves referential safety", () => {
+  const migration = readFileSync(
+    new URL("../drizzle/0004_watery_psynapse.sql", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(migration, /CREATE TABLE "post_likes"/);
+  assert.match(migration, /CREATE TABLE "comments"/);
+  assert.match(migration, /CREATE UNIQUE INDEX "post_likes_user_post_unique"/);
+  assert.match(migration, /CREATE INDEX "comments_post_created_idx"/);
+  assert.match(migration, /post_likes_post_id_posts_id_fk.*ON DELETE cascade/s);
+  assert.match(migration, /comments_user_id_users_id_fk.*ON DELETE cascade/s);
+  assert.match(migration, /comments_content_length_check/);
+  assert.doesNotMatch(migration, /DROP TABLE|TRUNCATE|DELETE FROM|ALTER COLUMN/i);
+});
+
+test("social feed scope binds session identity and preserves cursor/tag order", () => {
+  const cursor = { createdAt: "2026-11-23T10:00:00.123456Z", id: targetId };
+  const result = new PgDialect().sqlToQuery(
+    buildSocialFeedCondition(ownerId, cursor, "sunset"),
+  );
+
+  assert.match(result.sql, /"posts"."user_id"/);
+  assert.match(result.sql, /"follows"/);
+  assert.match(result.sql, /"follower_id"/);
+  assert.match(result.sql, /"following_id"/);
+  assert.match(result.sql, /post_hashtags/);
+  assert.equal(result.sql.includes(ownerId), false);
+  assert.equal(result.sql.includes("sunset"), false);
+  assert.deepEqual(result.params, [
+    ownerId,
+    ownerId,
+    "sunset",
+    cursor.createdAt,
+    cursor.createdAt,
+    cursor.id,
+  ]);
+
+  const firstPage = new PgDialect().sqlToQuery(
+    buildSocialFeedCondition(ownerId, null),
+  );
+  assert.deepEqual(firstPage.params, [ownerId, ownerId]);
+});
+
+test("engagement validation rejects client identity, empty, and oversized comments", () => {
+  const like = likeActionSchema.parse({
+    postId: targetId,
+    intent: "like",
+    userId: ownerId,
+    likeCount: 99,
+  });
+  assert.deepEqual(like, { postId: targetId, intent: "like" });
+  assert.equal(likeActionSchema.safeParse({ postId: targetId, intent: "block" }).success, false);
+
+  assert.equal(commentContentSchema.safeParse("   ").success, false);
+  assert.equal(commentContentSchema.safeParse("x".repeat(1001)).success, false);
+  assert.equal(commentContentSchema.parse("  hello  "), "hello");
+
+  const created = createCommentSchema.parse({
+    postId: targetId,
+    content: "  Nice shot  ",
+    userId: ownerId,
+  });
+  assert.deepEqual(created, { postId: targetId, content: "Nice shot" });
+  assert.equal(createCommentSchema.safeParse({ postId: targetId, content: "" }).success, false);
+  assert.equal(deleteCommentSchema.safeParse({ commentId: "bad" }).success, false);
+  assert.equal(commentPageQuerySchema.safeParse({ limit: 25 }).success, false);
+  assert.equal(commentPageQuerySchema.parse({}).limit, 12);
+});
+
 const integrationEnabled = Boolean(
   process.env.LUMA_DB_INTEGRATION === "1" && process.env.DATABASE_URL,
 );
@@ -548,6 +668,83 @@ test(
     } finally {
       // Only rows created by this test are removed; user deletion cascades.
       await db`DELETE FROM users WHERE id IN (${first}, ${second})`;
+    }
+  },
+);
+
+test(
+  "real Neon likes and comments constraints (opt-in integration)",
+  { skip: integrationEnabled ? false : "Set LUMA_DB_INTEGRATION=1 and DATABASE_URL for a migrated test database" },
+  async () => {
+    const { neon } = await import("@neondatabase/serverless");
+    const db = neon(process.env.DATABASE_URL);
+    const suffix = randomUUID().replaceAll("-", "").slice(0, 12);
+    const author = randomUUID();
+    const other = randomUUID();
+    const postId = randomUUID();
+    const authorName = `it_${suffix}l`;
+    const otherName = `it_${suffix}m`;
+
+    try {
+      await db`
+        INSERT INTO users (id, auth_user_id, email, username)
+        VALUES (${author}, ${randomUUID()}, ${`${authorName}@example.test`}, ${authorName}),
+               (${other}, ${randomUUID()}, ${`${otherName}@example.test`}, ${otherName})
+      `;
+      await db`
+        INSERT INTO posts (id, user_id, caption)
+        VALUES (${postId}, ${author}, ${"integration engagement"})
+      `;
+
+      await db`INSERT INTO post_likes (user_id, post_id) VALUES (${author}, ${postId})`;
+      await assert.rejects(
+        db`INSERT INTO post_likes (user_id, post_id) VALUES (${author}, ${postId})`,
+        (error) => error?.code === "23505",
+      );
+
+      const likes = await db`
+        SELECT count(*)::int AS count FROM post_likes WHERE post_id = ${postId}
+      `;
+      assert.equal(likes[0].count, 1);
+      const removedLike = await db`
+        DELETE FROM post_likes WHERE user_id = ${author} AND post_id = ${postId} RETURNING id
+      `;
+      assert.equal(removedLike.length, 1);
+      const repeatedUnlike = await db`
+        DELETE FROM post_likes WHERE user_id = ${author} AND post_id = ${postId} RETURNING id
+      `;
+      assert.equal(repeatedUnlike.length, 0);
+
+      await assert.rejects(
+        db`INSERT INTO comments (post_id, user_id, content) VALUES (${postId}, ${author}, ${""})`,
+        (error) => error?.code === "23514",
+      );
+      const inserted = await db`
+        INSERT INTO comments (post_id, user_id, content)
+        VALUES (${postId}, ${author}, ${"Looks great"}) RETURNING id
+      `;
+      const commentId = inserted[0].id;
+      const otherDelete = await db`
+        DELETE FROM comments WHERE id = ${commentId} AND user_id = ${other} RETURNING id
+      `;
+      assert.equal(otherDelete.length, 0);
+      const ownerDelete = await db`
+        DELETE FROM comments WHERE id = ${commentId} AND user_id = ${author} RETURNING id
+      `;
+      assert.equal(ownerDelete.length, 1);
+
+      const remaining = await db`
+        SELECT
+          (SELECT count(*)::int FROM post_likes WHERE post_id = ${postId}) AS likes,
+          (SELECT count(*)::int FROM comments WHERE post_id = ${postId}) AS comments
+      `;
+      assert.deepEqual(
+        { likes: remaining[0].likes, comments: remaining[0].comments },
+        { likes: 0, comments: 0 },
+      );
+    } finally {
+      // Only rows created by this test are removed; user deletion cascades.
+      await db`DELETE FROM users WHERE id IN (${author}, ${other})`;
     }
   },
 );

@@ -44,3 +44,25 @@ export interface PostActionState {
 export function initialPostActionState(): PostActionState {
   return { status: "idle" };
 }
+
+export interface LikeActionState {
+  status: "idle" | "error" | "success";
+  message?: string;
+  liked?: boolean;
+  likeCount?: number;
+}
+
+export function initialLikeActionState(): LikeActionState {
+  return { status: "idle" };
+}
+
+export interface CommentActionState {
+  status: "idle" | "error" | "success";
+  message?: string;
+  commentId?: string;
+  commentCount?: number;
+}
+
+export function initialCommentActionState(): CommentActionState {
+  return { status: "idle" };
+}

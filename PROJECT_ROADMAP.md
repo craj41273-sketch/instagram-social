@@ -95,25 +95,38 @@ Status legend: `[x]` complete, `[~]` in progress, `[ ]` planned.
 - [x] Automated structural tests for upload/post validation, caption rendering, and same-origin writes
 - [ ] Real upload/post lifecycle tests when credentials are available
 - [x] Cursor-paginated feed with hashtag filters and real DB records
-- [ ] Likes and save state
-- [ ] Comments and replies
 
-> Posts/media are implemented locally. Remote migration, live upload lifecycle, and Supabase bucket policies still require real credentials; likes, save, and comments remain later work.
+> Posts/media are implemented locally. Remote migration, live upload lifecycle, and Supabase bucket policies still require real credentials. Likes and comments moved to Block 7; save state remains out of scope.
 
-## Block 7 — Stories and notifications
+## Block 7 — Social feed, likes, and comments (complete locally)
+
+- [x] Authenticated feed of own and followed users' posts, newest first; anonymous visitors keep the public recent feed
+- [x] Reusable premium post card with author/profile links, media, caption, timestamp, like action, like/comment counts, comment previews, and owner menu
+- [x] `post_likes` table with unique `(user_id, post_id)` pair, foreign keys, indexes, idempotent like/unlike, DB-derived counts and viewer state
+- [x] Optimistic like UI with rollback, error state, pending protection, and accessible pressed state
+- [x] `comments` table with foreign keys, indexes, DB length check, Zod validation, plain-text rendering, cursor pagination, counts, previews, and owner-only deletion
+- [x] `/post/[postId]` detail page with like state, comment creation/deletion, invalid/missing post handling, and comment paging
+- [x] Cursor-paginated feed (`created_at`, `id`) with hashtag filter, Load More, loading, empty, and error states
+- [x] Session-derived identity, input validation, parameterized SQL, rate limits, and safe errors in every engagement action
+- [x] Structural unit tests plus opt-in remote Neon integration tests; no dependencies added
+- [ ] Real Neon/Supabase authenticated lifecycle tests with credentials
+
+> Migration `drizzle/0004_watery_psynapse.sql` is additive and reviewed but unapplied from this environment. The in-process rate limiter is per-process; a shared store is needed for multi-instance deployments. Save state, double-tap likes, Explore, Stories, Reels, Messaging, Notifications, recommendations, and ads are out of scope.
+
+## Block 8 — Stories and notifications
 
 - [ ] Story creation, expiry, and viewer tracking
 - [ ] Story ring and viewer UI
 - [ ] Notification generation and inbox
 
-## Block 8 — Messaging and realtime
+## Block 9 — Messaging and realtime
 
 - [ ] Conversation and message schema
 - [ ] Realtime message delivery
 - [ ] Typing indicators and presence
 - [ ] Unread counts
 
-## Block 9 — Polish and hardening
+## Block 10 — Polish and hardening
 
 - [ ] Dark/light refinements and responsive audit
 - [ ] Image optimization and accessibility audit
@@ -121,7 +134,7 @@ Status legend: `[x]` complete, `[~]` in progress, `[ ]` planned.
 - [ ] Error monitoring and structured logging
 - [ ] Automated tests and CI
 
-## Block 10 — Launch
+## Block 11 — Launch
 
 - [ ] Production environment configuration
 - [ ] Performance budget and build verification

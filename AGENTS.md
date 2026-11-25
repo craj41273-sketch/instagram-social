@@ -18,7 +18,7 @@ You are working on a premium Instagram-inspired social application. Follow these
 2. Never overwrite unrelated files or existing user work outside this repository.
 3. Ask before adding a dependency that is not part of the approved stack: Next.js App Router, TypeScript, Tailwind CSS, shadcn/ui, Lucide, Neon PostgreSQL, Supabase Auth/Storage/Realtime, Drizzle ORM, Zod.
 
-Current state: Blocks 1–5 are complete. Real profiles, follow/unfollow, follower/following lists, counts, bounded user search, validated avatar/cover uploads, a DB-backed profile posts grid/count, social dialogs, suggested users, and optimistic follow updates are implemented. The shared `posts`, `post_media`, and `post_hashtags` schema/metadata foundation also exists for Block 6, which now needs complete post creation, detail, edit/delete, feed, and media viewer UI. Do not build stories, messaging, or notifications. Backend details and credential requirements live in `docs/BACKEND.md`; Block 5 specifics live in `docs/PROFILES.md`.
+Current state: Blocks 1–7 are complete locally. Real profiles, follows, bounded user search, validated avatar/cover uploads, post creation/media/edit/delete, and the paginated post feed exist. Block 7 adds an authenticated self/following feed, `post_likes` and `comments` tables, engagement actions/services, like/comment UI, and a post detail conversation. Do not build stories, messaging, notifications, explore, recommendations, or save state. Backend details and credential requirements live in `docs/BACKEND.md`; Block 5 specifics live in `docs/PROFILES.md`; Block 7 behavior and limitations live in `README.md`. Migration `drizzle/0004_watery_psynapse.sql` is additive and unapplied without credentials.
 
 ## Architecture
 

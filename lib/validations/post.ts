@@ -72,3 +72,29 @@ export const postFeedQuerySchema = z.object({
     .regex(/^[a-z0-9_]{1,30}$/)
     .optional(),
 });
+
+/** Engagement actions accept only references and text; identity stays server-side. */
+export const likeActionSchema = z.object({
+  postId: z.uuid(),
+  intent: z.enum(["like", "unlike"]),
+});
+
+export const commentContentSchema = z
+  .string()
+  .trim()
+  .min(1, "Write a comment before posting.")
+  .max(1000, "Comments must be 1,000 characters or fewer.");
+
+export const createCommentSchema = z.object({
+  postId: z.uuid(),
+  content: commentContentSchema,
+});
+
+export const deleteCommentSchema = z.object({
+  commentId: z.uuid(),
+});
+
+export const commentPageQuerySchema = z.object({
+  cursor: z.string().max(512).optional(),
+  limit: z.coerce.number().int().min(1).max(24).default(12),
+});
