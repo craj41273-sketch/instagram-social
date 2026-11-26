@@ -19,6 +19,7 @@ export default function SocialLayout({ children }: { children: ReactNode }) {
           </Link>
           <nav aria-label="Social navigation" className="flex min-w-0 items-center gap-1 sm:gap-3">
             {[
+              { href: "/posts#stories", label: "Stories" },
               { href: "/explore", label: "Explore" },
               { href: "/search", label: "Search" },
               { href: "/posts", label: "Posts" },

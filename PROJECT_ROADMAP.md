@@ -128,11 +128,18 @@ Status legend: `[x]` complete, `[~]` in progress, `[ ]` planned.
 
 > Migrations `drizzle/0004_watery_psynapse.sql` and `drizzle/0005_spooky_mach_iv.sql` are additive and reviewed but unapplied from this environment. Search rate limiting is an authenticated per-process preparation layer; a shared store is required for multi-instance deployments. Stories, messaging, notifications, recommendations, and ads remain out of scope.
 
-## Block 9 — Stories and notifications
+## Block 9 — Stories (complete locally; notifications deferred)
 
-- [ ] Story creation, expiry, and viewer tracking
-- [ ] Story ring and viewer UI
-- [ ] Notification generation and inbox
+- [x] Additive `stories`, `story_views`, and `story_reactions` schema with indexes, checks, cascading FKs, unique view/reaction pairs, and a server-generated 24-hour `expires_at`
+- [x] Authenticated, same-origin multipart `/api/stories` upload with server-side MIME/magic-byte/size validation, owner-namespaced storage, and rollback cleanup
+- [x] Server-only story services: grouped active/followed queries, detail reads filtered by expiry, unique view writes, viewer lists, mutable reactions, and owner-only delete with honest storage-cleanup reporting
+- [x] Stories tray on `/posts`, authenticated `/stories/create`, full-screen `/stories/[userId]` with 6-second progression, pause/resume, visibility pause, keyboard/tap navigation, views, reactions, and owner delete, plus `/stories/viewers/[storyId]`
+- [x] Zod validation, session-derived identity, parameterized SQL, per-user rate-limit preparation, and `**.supabase.co` image pattern
+- [x] Structural/unit tests for schema, expiration, visibility, ownership, deletion paths, views, duplicates, reactions, media validation, and migration safety
+- [ ] Real Neon/Supabase story upload, view, reaction, and deletion lifecycle tests with credentials
+- [ ] Real browser visual checks at 320/375/430/768/1024/1440 px (no browser automation available here)
+
+> Migration `drizzle/0006_stories.sql` is additive and reviewed but unapplied from this environment. Stories are images only; expired rows/objects are filtered from all reads and cleaned only on explicit owner deletion — no scheduled cleanup job exists. No private-account flag exists, so visibility matches the existing own/accepted-follow feed rule. The rate limiter is per-process. Notification generation and inbox are deferred to a later block, not part of Block 9.
 
 ## Block 10 — Messaging and realtime
 

@@ -86,20 +86,26 @@ export async function uploadValidatedImage(
   }
 }
 
-/** Best-effort cleanup after a partial multi-file upload failure. */
+/**
+ * Best-effort cleanup after a partial upload or an owned story deletion.
+ * Returns false when an object may still exist so callers can report it.
+ */
 export async function removeStorageObjects(
   bucket: StorageBucket,
   paths: string[],
-): Promise<void> {
-  if (paths.length === 0) return;
+): Promise<boolean> {
+  if (paths.length === 0) return true;
 
   try {
     const storage = await createSupabaseStorageClient();
     const { error } = await storage.from(bucket).remove(paths);
     if (error) {
       logServerError("storage.remove", error, { bucket, count: paths.length });
+      return false;
     }
+    return true;
   } catch (error) {
     logServerError("storage.removeUnknown", error, { bucket, count: paths.length });
+    return false;
   }
 }

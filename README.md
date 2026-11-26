@@ -1,6 +1,6 @@
 # Luma
 
-Premium, dark-first photo-sharing experience built on Next.js. **Blocks 1–8 are complete locally.** Profiles include validated avatar/cover uploads, real social graph state, and a DB-backed post grid. Posts add multi-image creation, media viewing, owner-only editing/deletion, and a paginated feed. Block 7 adds a self/following social feed, database-backed likes, comments, and a post detail conversation. Block 8 adds a real-photo Explore grid, debounced global search, discover-people suggestions, and explainable trending. Remote Neon/Supabase verification still requires real credentials.
+Premium, dark-first photo-sharing experience built on Next.js. **Blocks 1–9 are complete locally.** Profiles include validated avatar/cover uploads, real social graph state, and a DB-backed post grid. Posts add multi-image creation, media viewing, owner-only editing/deletion, and a paginated feed. Block 7 adds a self/following social feed, database-backed likes, comments, and a post detail conversation. Block 8 adds a real-photo Explore grid, debounced global search, discover-people suggestions, and explainable trending. Block 9 adds 24-hour photo stories with a feed tray, full-screen viewer, unique view tracking, reactions, and owner-only deletion. Remote Neon/Supabase verification still requires real credentials.
 
 ## Stack
 
@@ -63,6 +63,10 @@ Open <http://localhost:3000>. Every route — the landing page, design system, a
 | `/search` | Authenticated people/caption search with debouncing, tabs, bounded results, and retry states |
 | `/api/search` | Authenticated, rate-limited combined/person/post search JSON endpoint |
 | `/post/[postId]` | Post detail with like state, paginated comments, owner-only comment deletion, and loading/error states |
+| `/stories/create` | Authenticated single-image story composer with real upload progress |
+| `/stories/[userId]` | Full-screen story viewer with progression, pause/resume, keyboard/tap navigation, views, reactions, and owner deletion |
+| `/stories/viewers/[storyId]` | Owner-only list of unique story viewers |
+| `/api/stories` | Authenticated, same-origin multipart story upload endpoint |
 | `/privacy`, `/terms`, `/contact` | Honest placeholder pages so footer links resolve |
 
 > **Credential status:** all auth, profile, and post routes are implemented locally; real signup, data queries, uploads, follow/post mutations, and email delivery require the values in `.env.local`. No remote migration was applied from this environment. See [`docs/BACKEND.md`](docs/BACKEND.md) and [`docs/PROFILES.md`](docs/PROFILES.md).
@@ -102,9 +106,10 @@ Copy `.env.example` to `.env.local` and fill in real values. `.env*` files are i
 ```text
 app/(site)/           Marketing shell: landing, design system, policy pages
 app/(auth)/           Focused shell: login, signup, recovery, verification
-app/(social)/         Public profiles, owner editor, social lists, post, explore, and search routes
-app/actions/          Authentication, profile, media, follow, post, and engagement actions
+app/(social)/         Public profiles, owner editor, social lists, post, explore, search, and story routes
+app/actions/          Authentication, profile, media, follow, post, engagement, and story actions
 app/api/search        Authenticated global search endpoint
+app/api/stories       Authenticated multipart story upload endpoint
 app/api/users/search  Authenticated username lookup foundation
 app/auth/             Supabase callback and OTP confirmation handlers
 app/                  Root providers, global styles, error/loading/not-found
@@ -116,9 +121,11 @@ components/layout/    Header, footer, page container, info-page template
 components/shared/    Brand, theme, states, media, identity components
 components/profile/   Profile header, avatar, stats, tabs, lists, forms, actions
 components/discovery/ Explore grid, trending strip, debounced search experience
+components/stories/   Feed tray, composer, and full-screen viewer
 lib/auth/             Supabase clients, DAL, identity mapping, constants
-lib/db/               Drizzle client, schema, profile/follow/post/engagement/discovery ops, parameterized SQL
+lib/db/               Drizzle client, schema, profile/follow/post/engagement/discovery/story ops, parameterized SQL
 lib/discovery/        Shared discovery types, LIKE escaping, explainable trending ranking
+lib/stories/          Story constants, expiry, action state, and safe DTOs
 lib/profile/          Profile action state, display helpers, list loading
 lib/posts/            Pure caption/hashtag helpers
 lib/pagination.ts     Bounded cursors for social graph and post lists
@@ -156,6 +163,19 @@ public/               Static assets
 - **Not included:** recent-search persistence, AI recommendations, and browser-driven responsive screenshots. Search state is shareable through `/search?q=...`; responsive behavior was checked structurally with Tailwind breakpoints, not via screenshots.
 - **Verification:** unit/structural tests cover validation, escaping, parameterized conditions, exclusion logic, ranking, indexes, and reuse of existing post/follow paths.
 
+## Block 9 behavior
+
+- **Data:** three additive tables — `stories`, `story_views`, `story_reactions` — with UUID keys, cascading foreign keys, unique `(story_id, viewer_id)` / `(story_id, user_id)` pairs, length/MIME/emoji checks, and indexes for owner, expiry, and paging. Bytes stay in Supabase Storage; Neon stores only metadata.
+- **Creation:** `/stories/create` uploads one JPEG/PNG/WebP/GIF up to 10 MB through `/api/stories` with real XHR progress. The route requires a verified session and same-origin `Origin`, revalidates MIME/magic bytes/size on the server, and rejects missing configuration with a 503. On any failure after upload it removes the object.
+- **Expiration:** `expires_at` is generated server-side as `now() + interval '24 hours'` (also the DB default) and is never accepted from a form. Every tray, detail, view, and reaction query filters `expires_at > now()`, so expired stories disappear from reads and writes without a background job.
+- **Visibility:** stories follow the existing feed rule — the owner's own stories plus stories from accepted follows. There is no private-account flag in the current schema, so this is the strongest rule available; document any future private account setting before changing queries.
+- **Viewer:** `/stories/[userId]` starts at the requested author and can navigate across all visible groups. Each story displays for 6 seconds with progress bars, tap/keyboard navigation, and pause/resume that also pauses when the tab is hidden. Viewers are recorded once per story by the session-derived user; owners do not view their own stories. `/stories/viewers/[storyId]` returns unique viewers only to the owner.
+- **Reactions:** one mutable reaction per `(story_id, user_id)` from `❤️`, `😂`, `😮`, `🔥`, `👏`; setting a new emoji replaces the old one and sending `null` removes it. Counts and the viewer's current choice come from one bounded aggregate query.
+- **Deletion:** owner-only action; the DB row is deleted first, then the owner-namespaced object is removed from the `stories` bucket only when the stored path belongs to the authenticated Supabase user. Failed storage cleanup is reported to the user instead of being called success.
+- **Migration:** `drizzle/0006_stories.sql` is additive and was reviewed but **not applied** from this environment because Neon credentials are unavailable. Apply `0004`, `0005`, and `0006` before using stories remotely; the `stories` Supabase Storage bucket must exist and allow the documented owner-prefixed paths.
+- **Security:** no client identity or expiry is trusted; Zod validates payloads, SQL values are parameterized, visibility is rechecked inside view/reaction writes, uploads are rate-limited per user, and the rate limiter remains per-process only. Story images use the existing validated image helpers and safe path builder; the `**.supabase.co` Next Image remote pattern was added.
+- **Limitations:** images only (no video), no scheduled hard-delete of expired rows/objects — they are filtered from all reads and cleaned only on explicit owner deletion, no Realtime presence, no notifications (deferred), and no browser screenshots at 320/375/430/768/1024/1440 px. Responsive layout was reviewed structurally and live uploads/views need real credentials.
+
 ## Current status
 
 - [x] Next.js App Router + TypeScript strict mode
@@ -182,5 +202,7 @@ public/               Static assets
 - [x] Explore grid, hashtag filters, cursor pagination, discover people, and explainable trending (Block 8)
 - [x] Debounced authenticated search with People/Posts tabs, bounded offsets, and safe projections (Block 8)
 - [x] Additive trigram index migration and discovery unit/structural tests (Block 8)
-- [ ] Save state (not requested in Block 7)
-- [ ] Stories, messaging, notifications, and recommendations (later blocks)
+- [x] 24-hour stories with server-derived expiry, owner/follow visibility, and an authenticated upload route (Block 9)
+- [x] Stories tray, full-screen viewer with progression/pause/navigation, unique views, reactions, viewer list, and owner deletion (Block 9)
+- [x] Additive story migration, image validation, parameterized SQL, and structural tests (Block 9)
+- [ ] Save state, messaging, notifications, and recommendations (later blocks)

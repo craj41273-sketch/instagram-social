@@ -241,6 +241,105 @@ export const comments = pgTable(
   ],
 );
 
+/**
+ * A story is one short-lived image owned by an application user. Bytes live in
+ * Supabase Storage; Neon stores the validated URL, owner-scoped object key,
+ * optional overlay, and a server-generated 24-hour expiration.
+ */
+export const stories = pgTable(
+  "stories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    mediaUrl: text("media_url").notNull(),
+    storagePath: text("storage_path").notNull(),
+    mediaType: text("media_type").notNull().default("image"),
+    byteSize: integer("byte_size").notNull(),
+    caption: text("caption").notNull().default(""),
+    textOverlay: text("text_overlay"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now() + interval '24 hours'`),
+  },
+  (table) => [
+    uniqueIndex("stories_storage_path_unique").on(table.storagePath),
+    index("stories_user_id_idx").on(table.userId),
+    index("stories_created_at_idx").on(table.createdAt),
+    index("stories_expires_at_idx").on(table.expiresAt),
+    index("stories_user_expires_created_idx").on(
+      table.userId,
+      table.expiresAt,
+      table.createdAt,
+    ),
+    check("stories_media_type_check", sql`${table.mediaType} = 'image'`),
+    check("stories_byte_size_check", sql`${table.byteSize} > 0`),
+    check("stories_caption_length_check", sql`length(${table.caption}) <= 500`),
+    check(
+      "stories_text_overlay_length_check",
+      sql`length(${table.textOverlay}) <= 120`,
+    ),
+    check("stories_expires_after_created_check", sql`${table.expiresAt} > ${table.createdAt}`),
+  ],
+);
+
+/** One view per (story, viewer); duplicate reads are idempotent. */
+export const storyViews = pgTable(
+  "story_views",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    storyId: uuid("story_id")
+      .notNull()
+      .references(() => stories.id, { onDelete: "cascade" }),
+    viewerId: uuid("viewer_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    viewedAt: timestamp("viewed_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("story_views_story_viewer_unique").on(table.storyId, table.viewerId),
+    index("story_views_story_idx").on(table.storyId),
+    index("story_views_viewer_idx").on(table.viewerId),
+    index("story_views_viewed_at_idx").on(table.viewedAt),
+  ],
+);
+
+/** One mutable reaction per (story, user); emoji values are fixed in the DB. */
+export const storyReactions = pgTable(
+  "story_reactions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    storyId: uuid("story_id")
+      .notNull()
+      .references(() => stories.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    emoji: text("emoji").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("story_reactions_story_user_unique").on(table.storyId, table.userId),
+    index("story_reactions_story_idx").on(table.storyId),
+    index("story_reactions_user_idx").on(table.userId),
+    check(
+      "story_reactions_emoji_check",
+      sql`${table.emoji} in ('❤️', '😂', '😮', '🔥', '👏')`,
+    ),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Profile = typeof profiles.$inferSelect;
@@ -257,3 +356,9 @@ export type PostLike = typeof postLikes.$inferSelect;
 export type NewPostLike = typeof postLikes.$inferInsert;
 export type Comment = typeof comments.$inferSelect;
 export type NewComment = typeof comments.$inferInsert;
+export type Story = typeof stories.$inferSelect;
+export type NewStory = typeof stories.$inferInsert;
+export type StoryView = typeof storyViews.$inferSelect;
+export type NewStoryView = typeof storyViews.$inferInsert;
+export type StoryReaction = typeof storyReactions.$inferSelect;
+export type NewStoryReaction = typeof storyReactions.$inferInsert;

@@ -46,6 +46,15 @@ export function buildPostMediaPath(
   ]);
 }
 
+/** Story media is one immutable, owner-namespaced object per story ID. */
+export function buildStoryMediaPath(
+  authUserId: string,
+  storyId: string,
+  extension: string,
+): string {
+  return storageObjectKey([authUserId, "stories", `${storyId}.${extension}`]);
+}
+
 /** Extracts the owner segment so storage policies can be documented and tested. */
 export function storagePathOwner(path: string): string | null {
   return storageObjectKey([path]).split("/")[0] ?? null;

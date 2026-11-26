@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Images, Search, UserPlus } from "lucide-react";
 import { PageContainer } from "@/components/layout/page-container";
 import { CreatePostControl } from "@/components/posts/create-post-dialog";
+import { StoriesTray } from "@/components/stories/stories-tray";
 import { PostCard } from "@/components/posts/post-card";
 import { UserList } from "@/components/profile/user-list";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -11,6 +12,7 @@ import { PremiumButton } from "@/components/ui/premium-button";
 import { Input } from "@/components/ui/input";
 import { getCurrentProfile } from "@/lib/auth/dal";
 import { listFeedPosts, listRecentPosts } from "@/lib/db/posts";
+import { listStoryGroups } from "@/lib/db/stories";
 import { getSuggestedUsers } from "@/lib/db/users";
 import { logServerError } from "@/lib/logging";
 import { postFeedQuerySchema } from "@/lib/validations/post";
@@ -36,6 +38,15 @@ export default async function PostsPage({ searchParams }: PostsPageProps) {
     viewer = await getCurrentProfile();
   } catch (error) {
     logServerError("posts.page.viewer", error);
+  }
+
+  let storyGroups: Awaited<ReturnType<typeof listStoryGroups>> = [];
+  if (viewer) {
+    try {
+      storyGroups = await listStoryGroups({ viewerUserId: viewer.user.id });
+    } catch (error) {
+      logServerError("posts.page.stories", error);
+    }
   }
 
   let page = null;
@@ -85,6 +96,8 @@ export default async function PostsPage({ searchParams }: PostsPageProps) {
         </div>
         <CreatePostControl isAuthenticated={Boolean(viewer)} />
       </div>
+
+      {viewer ? <StoriesTray groups={storyGroups} /> : null}
 
       <form action="/posts" method="get" className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-0 flex-1">

@@ -1,6 +1,7 @@
 import {
   buildPostMediaPath,
   buildProfileImagePath,
+  buildStoryMediaPath,
   type ProfileImageKind,
 } from "@/lib/storage/paths";
 
@@ -31,6 +32,7 @@ export const IMAGE_LIMITS = {
   COVER_BYTES: 8 * 1024 * 1024,
   POST_MEDIA_BYTES: 10 * 1024 * 1024,
   MAX_POST_MEDIA: 10,
+  STORY_MEDIA_BYTES: 10 * 1024 * 1024,
 } as const;
 
 /** Multipart overhead allowance for the maximum ten-image post request. */
@@ -169,4 +171,12 @@ export function postMediaPath(
   extension: string,
 ): string {
   return buildPostMediaPath(authUserId, postId, position, objectId, extension);
+}
+
+export function storyMediaPath(
+  authUserId: string,
+  storyId: string,
+  extension: string,
+): string {
+  return buildStoryMediaPath(authUserId, storyId, extension);
 }
