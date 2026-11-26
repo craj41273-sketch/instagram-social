@@ -1,0 +1,388 @@
+import "server-only";
+import { and, desc, eq, ne, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
+import { getDb } from "@/lib/db";
+import {
+  conversationParticipants,
+  conversations,
+  messages,
+  profiles,
+  users,
+} from "@/lib/db/schema";
+import { parseUserId } from "@/lib/db/profile-sql";
+import {
+  buildConversationAccessCondition,
+  buildCreateConversationStatement,
+  buildInboxCondition,
+  buildMarkConversationReadStatement,
+  buildMessagePageCondition,
+  buildSendMessageStatement,
+  buildUnreadMessageCondition,
+} from "@/lib/db/messaging-sql";
+import { AuthorizationError, DatabaseError, ValidationError } from "@/lib/errors";
+import { logServerError } from "@/lib/logging";
+import { decodePageCursor, encodePageCursor } from "@/lib/pagination";
+import type {
+  ConversationHeader,
+  InboxItem,
+  InboxPage,
+  MessageItem,
+  MessagePage,
+  UnreadCounts,
+} from "@/lib/messaging/types";
+
+/** Server-only messaging services: Neon is the only source of truth. */
+
+interface RawRow {
+  [key: string]: unknown;
+}
+
+function extractRows<T>(result: unknown): T[] {
+  if (Array.isArray(result)) return result as T[];
+  if (result && typeof result === "object" && "rows" in result) {
+    const rows = (result as { rows?: unknown }).rows;
+    return Array.isArray(rows) ? (rows as T[]) : [];
+  }
+  return [];
+}
+
+function toIso(value: unknown): string {
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "string" || typeof value === "number") {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+  }
+  return new Date(0).toISOString();
+}
+
+function numeric(value: unknown): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function validateConversationInput(conversationId: string, viewerId: string): void {
+  if (!parseUserId(conversationId) || !parseUserId(viewerId)) {
+    throw new ValidationError("Invalid conversation identity.");
+  }
+}
+
+/** Reuses an existing one-to-one conversation; duplicate clicks are idempotent. */
+export async function createConversation(
+  viewerId: string,
+  username: string,
+): Promise<string | null> {
+  if (!parseUserId(viewerId)) throw new ValidationError("Invalid account identity.");
+
+  try {
+    const result = await getDb().execute(
+      buildCreateConversationStatement(viewerId, username),
+    );
+    return extractRows<RawRow>(result)[0]?.id as string | undefined ?? null;
+  } catch (error) {
+    logServerError("db.createConversation", error);
+    throw new DatabaseError();
+  }
+}
+
+/** Returns peer details only when the viewer is a participant. */
+export async function getConversationHeader(
+  conversationId: string,
+  viewerId: string,
+): Promise<ConversationHeader | null> {
+  validateConversationInput(conversationId, viewerId);
+  const other = alias(conversationParticipants, "other");
+
+  try {
+    const rows = await getDb()
+      .select({
+        id: conversations.id,
+        userId: users.id,
+        username: users.username,
+        displayName: profiles.displayName,
+        avatarUrl: profiles.avatarUrl,
+      })
+      .from(conversations)
+      .innerJoin(
+        other,
+        and(
+          eq(other.conversationId, conversations.id),
+          ne(other.userId, viewerId),
+        ),
+      )
+      .innerJoin(users, eq(users.id, other.userId))
+      .leftJoin(profiles, eq(profiles.userId, users.id))
+      .where(buildConversationAccessCondition(viewerId, conversationId))
+      .limit(1);
+
+    const row = rows[0];
+    if (!row) return null;
+    return { ...row, displayName: row.displayName ?? row.username };
+  } catch (error) {
+    logServerError("db.getConversationHeader", error, { conversationId });
+    throw new DatabaseError();
+  }
+}
+
+/** Most-recent-first inbox with DB-derived unread counts and safe previews. */
+export async function listInbox(
+  viewerId: string,
+  options: { limit: number; cursor?: string | null },
+): Promise<InboxPage> {
+  if (!parseUserId(viewerId)) throw new ValidationError("Invalid account identity.");
+  const cursor = decodePageCursor(options.cursor);
+  const other = alias(conversationParticipants, "other");
+
+  const unreadCount = sql<number>`(
+    select count(*)::int
+    from messages m
+    inner join conversation_participants cp
+      on cp.conversation_id = m.conversation_id and cp.user_id = ${viewerId}
+    where m.conversation_id = ${conversations.id}
+      and ${buildUnreadMessageCondition(viewerId)}
+  )`;
+
+  // The CASE prevents deleted content from ever leaving the database.
+  const preview = sql<string | null>`(
+    select case when m.deleted_at is not null then 'Message deleted' else m.content end
+    from messages m
+    where m.conversation_id = ${conversations.id}
+    order by m.created_at desc, m.id desc
+    limit 1
+  )`;
+
+  const previewDeleted = sql<boolean>`(
+    select coalesce(m.deleted_at is not null, false)
+    from messages m
+    where m.conversation_id = ${conversations.id}
+    order by m.created_at desc, m.id desc
+    limit 1
+  )`;
+
+  try {
+    const rows = await getDb()
+      .select({
+        conversationId: conversations.id,
+        lastMessageAt: conversations.lastMessageAt,
+        userId: users.id,
+        username: users.username,
+        displayName: profiles.displayName,
+        avatarUrl: profiles.avatarUrl,
+        unreadCount,
+        preview,
+        previewDeleted,
+      })
+      .from(conversationParticipants)
+      .innerJoin(
+        conversations,
+        eq(conversationParticipants.conversationId, conversations.id),
+      )
+      .innerJoin(
+        other,
+        and(
+          eq(other.conversationId, conversations.id),
+          ne(other.userId, viewerId),
+        ),
+      )
+      .innerJoin(users, eq(users.id, other.userId))
+      .leftJoin(profiles, eq(profiles.userId, users.id))
+      .where(and(eq(conversationParticipants.userId, viewerId), buildInboxCondition(viewerId, cursor)))
+      .orderBy(desc(conversations.lastMessageAt), desc(conversations.id))
+      .limit(options.limit + 1);
+
+    const hasMore = rows.length > options.limit;
+    const visible = hasMore ? rows.slice(0, options.limit) : rows;
+    const items: InboxItem[] = visible.map((row) => ({
+      conversationId: row.conversationId,
+      userId: row.userId,
+      username: row.username,
+      displayName: row.displayName ?? row.username,
+      avatarUrl: row.avatarUrl,
+      lastMessageAt: toIso(row.lastMessageAt),
+      lastMessagePreview: row.preview ?? "No messages yet",
+      lastMessageDeleted: row.previewDeleted,
+      unreadCount: numeric(row.unreadCount),
+    }));
+    const last = visible.at(-1);
+
+    return {
+      items,
+      nextCursor: hasMore && last
+        ? encodePageCursor({
+            createdAt: toIso(last.lastMessageAt),
+            id: last.conversationId,
+          })
+        : null,
+    };
+  } catch (error) {
+    logServerError("db.listInbox", error);
+    throw new DatabaseError();
+  }
+}
+
+/** Newest-first keyset page reversed into chronological chat order. */
+export async function listMessages(
+  conversationId: string,
+  viewerId: string,
+  options: { limit: number; cursor?: string | null },
+): Promise<MessagePage> {
+  validateConversationInput(conversationId, viewerId);
+  const cursor = decodePageCursor(options.cursor);
+
+  try {
+    const rows = await getDb()
+      .select({
+        id: messages.id,
+        conversationId: messages.conversationId,
+        senderId: messages.senderId,
+        content: messages.content,
+        createdAt: messages.createdAt,
+        deletedAt: messages.deletedAt,
+      })
+      .from(messages)
+      .where(buildMessagePageCondition(conversationId, viewerId, cursor))
+      .orderBy(desc(messages.createdAt), desc(messages.id))
+      .limit(options.limit + 1);
+
+    const hasMore = rows.length > options.limit;
+    const visible = hasMore ? rows.slice(0, options.limit) : rows;
+    const items: MessageItem[] = visible
+      .map((row) => ({
+        id: row.id,
+        conversationId: row.conversationId,
+        senderId: row.senderId,
+        content: row.deletedAt ? "" : row.content,
+        createdAt: toIso(row.createdAt),
+        deleted: row.deletedAt !== null,
+      }))
+      .reverse();
+    const oldest = visible.at(-1);
+
+    return {
+      items,
+      nextCursor: hasMore && oldest
+        ? encodePageCursor({ createdAt: toIso(oldest.createdAt), id: oldest.id })
+        : null,
+    };
+  } catch (error) {
+    logServerError("db.listMessages", error, { conversationId });
+    throw new DatabaseError();
+  }
+}
+
+export interface SentMessageResult {
+  message: MessageItem;
+  recipientUserId: string;
+}
+
+/**
+ * Atomic single-statement send: participant check, client_id idempotency,
+ * conversation ordering, and notification upsert. No broadcast happens here.
+ */
+export async function sendMessage(
+  conversationId: string,
+  senderId: string,
+  input: { content: string; clientId: string },
+): Promise<SentMessageResult> {
+  validateConversationInput(conversationId, senderId);
+  if (!parseUserId(input.clientId)) throw new ValidationError("Invalid message identity.");
+
+  try {
+    const header = await getConversationHeader(conversationId, senderId);
+    if (!header) throw new AuthorizationError();
+
+    const result = await getDb().execute(
+      buildSendMessageStatement({
+        conversationId,
+        senderId,
+        clientId: input.clientId,
+        content: input.content,
+      }),
+    );
+    const row = extractRows<RawRow>(result)[0];
+    if (!row) throw new ValidationError("That message could not be sent.");
+
+    return {
+      message: {
+        id: String(row.id),
+        conversationId,
+        senderId,
+        content: input.content,
+        createdAt: toIso(row.created_at),
+        deleted: false,
+      },
+      recipientUserId: header.userId,
+    };
+  } catch (error) {
+    if (error instanceof ValidationError || error instanceof AuthorizationError) throw error;
+    logServerError("db.sendMessage", error, { conversationId });
+    throw new DatabaseError();
+  }
+}
+
+/** Updates only the caller's participant row and clears their message notice. */
+export async function markConversationRead(
+  conversationId: string,
+  viewerId: string,
+): Promise<boolean> {
+  validateConversationInput(conversationId, viewerId);
+
+  try {
+    const result = await getDb().execute(
+      buildMarkConversationReadStatement(viewerId, conversationId),
+    );
+    const row = extractRows<RawRow>(result)[0];
+    return numeric(row?.read_count) > 0;
+  } catch (error) {
+    logServerError("db.markConversationRead", error, { conversationId });
+    throw new DatabaseError();
+  }
+}
+
+export async function getUnreadMessageCount(viewerId: string): Promise<number> {
+  if (!parseUserId(viewerId)) return 0;
+
+  try {
+    const result = await getDb().execute(sql`
+      select count(*)::int as count
+      from messages m
+      inner join conversation_participants cp
+        on cp.conversation_id = m.conversation_id and cp.user_id = ${viewerId}
+      where ${buildUnreadMessageCondition(viewerId)}
+    `);
+    return numeric(extractRows<RawRow>(result)[0]?.count);
+  } catch (error) {
+    logServerError("db.getUnreadMessageCount", error);
+    throw new DatabaseError();
+  }
+}
+
+/** One combined endpoint prevents duplicate badge queries in the shell. */
+export async function getUnreadCounts(viewerId: string): Promise<UnreadCounts> {
+  if (!parseUserId(viewerId)) return { messages: 0, notifications: 0 };
+
+  try {
+    const result = await getDb().execute(sql`
+      select
+        (
+          select count(*)::int
+          from messages m
+          inner join conversation_participants cp
+            on cp.conversation_id = m.conversation_id and cp.user_id = ${viewerId}
+          where ${buildUnreadMessageCondition(viewerId)}
+        ) as messages,
+        (
+          select count(*)::int
+          from notifications n
+          where n.recipient_id = ${viewerId}::uuid and n.read_at is null
+        ) as notifications
+    `);
+    const row = extractRows<RawRow>(result)[0];
+    return {
+      messages: numeric(row?.messages),
+      notifications: numeric(row?.notifications),
+    };
+  } catch (error) {
+    logServerError("db.getUnreadCounts", error);
+    throw new DatabaseError();
+  }
+}

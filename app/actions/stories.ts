@@ -7,6 +7,10 @@ import {
   recordStoryView,
   setStoryReaction,
 } from "@/lib/db/stories";
+import {
+  getActiveStoryOwnerId,
+  recordStoryReactionNotification,
+} from "@/lib/db/notifications";
 import { toSafeMessage } from "@/lib/errors";
 import { logServerError } from "@/lib/logging";
 import { consumeRateLimit } from "@/lib/security/rate-limit";
@@ -70,6 +74,12 @@ export async function storyReactionAction(
       viewerId,
       parsed.data.emoji,
     );
+    if (result.emoji) {
+      const ownerId = await getActiveStoryOwnerId(parsed.data.storyId);
+      if (ownerId) {
+        await recordStoryReactionNotification(ownerId, viewerId, parsed.data.storyId);
+      }
+    }
     return {
       status: "success",
       emoji: result.emoji,

@@ -88,3 +88,19 @@ export function getSupabaseServiceEnv(): SupabaseServiceEnv {
     "Supabase service",
   );
 }
+
+/**
+ * Non-throwing service check for optional Realtime Broadcast publishing. A
+ * missing key disables delivery; Neon writes still succeed.
+ */
+export function getOptionalSupabaseServiceEnv(): SupabaseServiceEnv | null {
+  const result = supabasePublicEnvSchema
+    .extend({ SUPABASE_SERVICE_ROLE_KEY: z.string().min(1) })
+    .safeParse({
+      url: process.env.NEXT_PUBLIC_SUPABASE_URL,
+      anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    });
+
+  return result.success ? result.data : null;
+}

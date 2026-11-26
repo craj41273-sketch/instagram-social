@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentProfile } from "@/lib/auth/dal";
 import { followUser, unfollowUser } from "@/lib/db/follows";
 import { getPublicProfileByUsername } from "@/lib/db/profiles";
+import { recordFollowNotification } from "@/lib/db/notifications";
 import { logServerError } from "@/lib/logging";
 import type { FollowActionState } from "@/lib/profile/action-state";
 import { consumeRateLimit } from "@/lib/security/rate-limit";
@@ -69,6 +70,9 @@ export async function followAction(
   try {
     if (intent === "follow") {
       const result = await followUser(viewerId, target.userId);
+      if (result.following) {
+        await recordFollowNotification(target.userId, viewerId);
+      }
       revalidateAfterFollow(username, current.user.username);
       return {
         status: "success",

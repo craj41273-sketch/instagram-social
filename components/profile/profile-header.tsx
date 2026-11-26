@@ -3,6 +3,7 @@ import { CalendarDays, Link as LinkIcon, MapPin } from "lucide-react";
 import { ImageContainer } from "@/components/shared/image-container";
 import { PremiumButton } from "@/components/ui/premium-button";
 import { FollowButton } from "@/components/profile/follow-button";
+import { MessageButton } from "@/components/messaging/message-button";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { ProfileStats } from "@/components/profile/profile-stats";
 import type { SocialUserPage } from "@/lib/db/follows";
@@ -68,13 +69,21 @@ export function ProfileHeader({
                 <Link href="/profile/edit">Edit profile</Link>
               </PremiumButton>
             ) : (
-              <FollowButton
-                targetUsername={profile.username}
-                initialFollowing={isFollowing}
-                isAuthenticated={viewerUsername !== null}
-                isSelf={viewerUsername === profile.username}
-                loginHref={loginHref}
-              />
+              <>
+                <FollowButton
+                  targetUsername={profile.username}
+                  initialFollowing={isFollowing}
+                  isAuthenticated={viewerUsername !== null}
+                  isSelf={viewerUsername === profile.username}
+                  loginHref={loginHref}
+                />
+                <MessageButton
+                  username={profile.username}
+                  isAuthenticated={viewerUsername !== null}
+                  isSelf={viewerUsername === profile.username}
+                  loginHref={loginHref}
+                />
+              </>
             )}
           </div>
         </div>

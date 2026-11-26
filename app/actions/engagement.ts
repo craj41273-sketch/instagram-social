@@ -8,6 +8,10 @@ import {
   likePost,
   unlikePost,
 } from "@/lib/db/engagement";
+import {
+  getPostOwnerId,
+  recordPostNotification,
+} from "@/lib/db/notifications";
 import { toSafeMessage } from "@/lib/errors";
 import { logServerError } from "@/lib/logging";
 import type {
@@ -79,6 +83,13 @@ async function changeLike(
       return { status: "error", message: "That post is no longer available." };
     }
 
+    if (intent === "like") {
+      const ownerId = await getPostOwnerId(parsed.data.postId);
+      if (ownerId) {
+        await recordPostNotification(ownerId, current.user.id, parsed.data.postId, "like");
+      }
+    }
+
     revalidatePost(parsed.data.postId, current.user.username);
     return { status: "success", liked: state.liked, likeCount: state.likeCount };
   } catch (cause) {
@@ -135,6 +146,11 @@ export async function createCommentAction(
     );
     if (!created) {
       return { status: "error", message: "That post is no longer available." };
+    }
+
+    const ownerId = await getPostOwnerId(parsed.data.postId);
+    if (ownerId) {
+      await recordPostNotification(ownerId, current.user.id, parsed.data.postId, "comment");
     }
 
     revalidatePost(parsed.data.postId, current.user.username);

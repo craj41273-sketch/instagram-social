@@ -141,12 +141,20 @@ Status legend: `[x]` complete, `[~]` in progress, `[ ]` planned.
 
 > Migration `drizzle/0006_stories.sql` is additive and reviewed but unapplied from this environment. Stories are images only; expired rows/objects are filtered from all reads and cleaned only on explicit owner deletion — no scheduled cleanup job exists. No private-account flag exists, so visibility matches the existing own/accepted-follow feed rule. The rate limiter is per-process. Notification generation and inbox are deferred to a later block, not part of Block 9.
 
-## Block 10 — Messaging and realtime
+## Block 10 — Messaging, notifications, and realtime (complete locally)
 
-- [ ] Conversation and message schema
-- [ ] Realtime message delivery
-- [ ] Typing indicators and presence
-- [ ] Unread counts
+- [x] Additive `conversations`, `conversation_participants`, `messages`, and `notifications` schema with unique pair keys, idempotency keys, tombstones, checks, indexes, and cascading FKs
+- [x] Server-only conversation reuse, participant-scoped inbox/history, send, read state, unread counts, and notification/target services with Zod validation and parameterized SQL
+- [x] Authenticated `/messages`, `/messages/[conversationId]`, and `/notifications` routes with real data, cursor paging, loading/empty/error states, Message entry points, accessible responsive controls, and validated navigation
+- [x] Real follow/like/comment/story_reaction/message notices with no self-notifications, duplicates, private message text, or owner-only read bypass
+- [x] One shared browser user-channel subscription plus per-conversation subscriptions; Neon writes persist first, optional Supabase Broadcast sends opaque signals only, and clean polling/pause-on-hidden fallback refetches authoritative data
+- [x] DB-derived unread badges on social navigation with a combined `/api/unread` endpoint
+- [x] Structural/unit tests for schema, validation, SQL safety, dedupe, authorization, pagination, read/unread, navigation validation, privacy, and additive migration
+- [ ] Real Neon/Supabase message, notification, and Broadcast lifecycle tests with credentials
+- [ ] Typing indicators and presence (deliberately not built)
+- [ ] Real browser visual checks at 320/375/430/768/1024/1440 px (no browser automation available here)
+
+> Migration `drizzle/0007_short_korg.sql` is additive and reviewed but unapplied from this environment. Messaging is text-only and one-to-one; there is no group chat, attachment pipeline, E2E encryption, typing indicator, or presence state. Broadcast is optional and disabled when Supabase service configuration is absent; polling remains the fallback. The rate limiter is per-process, and real remote flows still need credentials.
 
 ## Block 11 — Polish and hardening
 

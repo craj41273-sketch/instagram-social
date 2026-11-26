@@ -1,9 +1,10 @@
-# Backend foundation (Block 4)
+# Backend foundation (Blocks 4–10)
 
-This document describes the backend introduced in Block 4 and extended in Block
-5. Blocks 1–3 (design system, landing page, and auth UI) are preserved. Block 4
-wired those screens to Neon and Supabase; Block 5 added profile/follow data and
-operations. Block 5 details live in `docs/PROFILES.md`.
+This document describes the backend introduced in Block 4 and extended through
+Block 10. Blocks 1–3 (design system, landing page, and auth UI) are preserved.
+Block 4 wired those screens to Neon and Supabase; Block 5 added profile/follow
+data, Blocks 7–9 added posts/engagement/stories, and Block 10 added one-to-one
+messaging and notifications. Block 5 details live in `docs/PROFILES.md`.
 
 ## Responsibilities
 
@@ -11,7 +12,7 @@ operations. Block 5 details live in `docs/PROFILES.md`.
 | --- | --- | --- |
 | UI | Next.js App Router, React, Tailwind | Existing Luma design system; no redesign |
 | Application logic | Server actions in `app/actions/`, services in `lib/` | Zod validation, rate limiting, safe errors |
-| Primary database | Neon PostgreSQL | App data: `users`, `profiles`, `follows`, `posts`, `post_media`, `post_hashtags`, `post_likes`, `comments` |
+| Primary database | Neon PostgreSQL | App data: profiles, social graph, posts, engagement, stories, conversations, messages, and notifications |
 | ORM | Drizzle via `getDb()` | Lazy, cached `neon-http` client |
 | Identity provider | Supabase Auth | Sessions in HttpOnly-ish cookies via `@supabase/ssr` |
 | Storage | Supabase Storage | Validated owner-scoped uploads for avatars, covers, and post media |
@@ -69,20 +70,26 @@ Supabase Storage; Neon stores metadata URLs and constraints only.
 - **comments**: `id` (UUID PK), `post_id` (FK → `posts.id`, cascade), `user_id`
   (FK → `users.id`, cascade), `content`, `created_at`, `updated_at`; length
   CHECK (1–1000), `(post_id, created_at, id)` index for cursor paging.
+- **stories / story_views / story_reactions**: 24-hour photo stories with a
+  server-generated `expires_at`, unique view/reaction pairs, allowed-emoji CHECK,
+  and cascading FKs. Every read filters `expires_at > now()`.
+- **conversations / conversation_participants**: one-to-one chats keyed by a
+  unique sorted user-ID `pair_key`; exactly two participant rows carry per-user
+  `last_read_at`. No group-chat state exists.
+- **messages**: text-only rows with cascading conversation/sender FKs, unique
+  `(sender_id, client_id)` idempotency key, `deleted_at` tombstone, 1–4000
+  character CHECK, and `(conversation_id, created_at, id)` paging index.
+- **notifications**: one row per `(recipient_id, actor_id, type, entity_id)`
+  with recipient/actor FKs, allowed-type CHECK, `read_at`, and no message text
+  or email copied into the row.
 
-Indexes: unique indexes on `users.auth_user_id`, `users.username`,
-`lower(users.username)`, `profiles.user_id`, `(follows.follower_id,
-follows.following_id)`, and `(post_likes.user_id, post_likes.post_id)`; plain
-indexes on `users.email`, `profiles.created_at`, `follows.follower_id`,
-`follows.following_id`, `follows.created_at`, `post_likes.post_id`,
-`post_likes.user_id`, `comments.user_id`, and
-`(comments.post_id, comments.created_at, comments.id)`.
-
-Usernames are normalized to lowercase by the shared Zod schema before any
-write. The `lower(username)` unique index is defense in depth.
-`users.username` is the only authoritative username column.
-
-Story, message, notification, and saved-post tables do not exist.
+Indexes cover all authorization and paging paths, including unique user,
+follow, like, story view/reaction, conversation pair, participant pair, message
+idempotency, and notification dedupe keys, plus composite cursor/read-state
+indexes. Usernames are normalized to lowercase by the shared Zod schema before
+any write; `users.username` is the only authoritative username column and the
+`lower(username)` unique index is defense in depth. Saved posts are still
+deferred.
 
 ### Migrations
 
@@ -93,15 +100,16 @@ npm run db:studio     # inspect the database with Drizzle Studio
 npm run db:push       # development-only schema push; avoid on shared/production DBs
 ```
 
-Generated migrations: `drizzle/0000_nosy_zaran.sql` (Block 4),
-`drizzle/0001_high_quentin_quire.sql` (Block 5: `follows` + `location`),
-`drizzle/0002_posts_media.sql` (posts + media metadata),
-`drizzle/0003_post_hashtags.sql` (normalized hashtags), and
-`drizzle/0004_watery_psynapse.sql` (Block 7 likes + comments). All were generated
-locally; they have **not** been applied to a remote database because no real
-Neon credentials were available. Apply them in order with `npm run db:migrate`
-after setting `DATABASE_URL`. Never run a destructive migration against a
-database with data without reviewing it first.
+Generated migrations: `0000_nosy_zaran.sql` (Block 4),
+`0001_high_quentin_quire.sql` (Block 5: follows + location),
+`0002_posts_media.sql`, `0003_post_hashtags.sql`,
+`0004_watery_psynapse.sql` (likes + comments),
+`0005_spooky_mach_iv.sql`, `0006_stories.sql` (Block 9), and
+`0007_short_korg.sql` (Block 10 conversations/messages/notifications). All were
+generated locally; they are additive and have **not** been applied to a remote
+database because no real Neon credentials were available. Apply them in order
+with `npm run db:migrate` after setting `DATABASE_URL`. Never run a destructive
+migration against a database with data without reviewing it first.
 
 ## Identity mapping
 
@@ -179,27 +187,37 @@ are optimistic; server actions and the DAL perform the authoritative checks.
 - Service-role key and Neon URL never sent to the browser.
 - Safe, curated error messages; raw SDK/database errors logged server-side.
 - Redirect destinations restricted to same-origin paths.
-- In-process rate-limit preparation on signup/login/recovery/resend and Block 5
-  profile/follow/search endpoints. Replace with a shared store before
-  multi-instance deployment.
+- In-process rate-limit preparation on auth, profile/follow/search, story,
+  conversation/message, and notification endpoints. Replace with a shared store
+  before multi-instance deployment.
 - Database constraints back application checks for usernames, follow uniqueness,
-  self-follows, caption/media limits, and cascade deletion.
+  self-follows, caption/media limits, pair/idempotency/notification dedupe,
+  message/notifications length and type checks, and cascade deletion.
+- Messaging and notification APIs derive sender/recipient identity only from the
+  verified session, require conversation membership or recipient ownership,
+  revalidate navigation targets, and never return private message text in a
+  notification or Broadcast payload.
 - Uploads use owner-namespaced paths, MIME allowlists, magic-byte checks, and
   request-scoped Supabase clients so Storage RLS still applies.
 
 ## Realtime architecture
 
-Neon is the primary database, so **Supabase Postgres Changes cannot be assumed
-to observe Neon tables**. For future live features (Block 8 messaging,
-notifications, presence) use one of:
+Neon is the authoritative application database, so **Supabase Postgres Changes
+cannot observe Neon tables**. Block 10 uses Supabase Broadcast only as an
+optional refresh signal:
 
-- Supabase **Broadcast**/**Presence** with the Realtime WebSocket transport,
-  publishing events from server-side mutations;
-- server-sent events or application WebSockets backed by Neon changes;
-- a dedicated event/outbox table in Neon plus a publisher.
+- Server services persist to Neon first, then `lib/realtime/publish.ts` sends
+  opaque `message`/`notification` signals to `conversation:<id>` and
+  `user:<id>` channels with `httpSend` and the server-only service-role key.
+- Missing Supabase service configuration disables publishing; writes and
+  polling still work. Failed broadcasts are logged and never fail a mutation.
+- The social shell owns one user-channel subscription per signed-in tab; one
+  additional subscription exists only while a conversation is open. Signals
+  contain no message text and only cause authenticated API refetches.
+- Bounded polling with hidden-tab pausing is the fallback, not a second source
+  of truth. Typing indicators and presence are deliberately not implemented.
 
 Do not enable Supabase Postgres Changes as a substitute for Neon replication.
-No messaging or realtime feature is implemented in this block.
 
 ## Storage
 
@@ -227,11 +245,13 @@ npm run build
 `npm test` uses Node's built-in test runner with a tiny local TS resolve hook;
 no new dependency was added. It covers validation, schema shape, identity
 input rejection, atomic/idempotent SQL generation, rate limiting, redirects,
-safe error mapping, follow constraints, cursors, and migration safety. A real
-Neon constraint test is opt-in via `LUMA_DB_INTEGRATION=1` plus `DATABASE_URL`
-against an already-migrated test database.
+safe error mapping, social constraints, cursors, messaging idempotency and
+read state, notification dedupe/guards/navigation, and migration safety. Real
+Neon integration tests are opt-in via `LUMA_DB_INTEGRATION=1` plus
+`DATABASE_URL` against an already-migrated test database and are skipped by
+default.
 
 Remote integration (real Supabase signup/login/email delivery and real Neon
-migration/query execution) is **not verified** without credentials. See
-`docs/PROFILES.md` and the completion report for the implemented / locally
+migration/query/Broadcast execution) is **not verified** without credentials.
+See `docs/PROFILES.md` and the completion report for the implemented / locally
 verified / pending split.

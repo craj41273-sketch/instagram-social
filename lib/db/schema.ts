@@ -340,6 +340,148 @@ export const storyReactions = pgTable(
   ],
 );
 
+/**
+ * One-to-one conversations. `pair_key` is the sorted pair of application user
+ * IDs, so the database rejects duplicate conversations even under concurrent
+ * clicks. Neon remains the only application database.
+ */
+export const conversations = pgTable(
+  "conversations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    pairKey: text("pair_key").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    lastMessageAt: timestamp("last_message_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("conversations_pair_key_unique").on(table.pairKey),
+    index("conversations_last_message_at_idx").on(table.lastMessageAt),
+    check("conversations_pair_key_check", sql`${table.pairKey} like '%:%'`),
+  ],
+);
+
+/** Exactly two participant rows are created per conversation by the service. */
+export const conversationParticipants = pgTable(
+  "conversation_participants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    joinedAt: timestamp("joined_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    lastReadAt: timestamp("last_read_at", { withTimezone: true }),
+    mutedAt: timestamp("muted_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("conversation_participants_conversation_user_unique").on(
+      table.conversationId,
+      table.userId,
+    ),
+    index("conversation_participants_conversation_idx").on(table.conversationId),
+    index("conversation_participants_user_idx").on(table.userId),
+    index("conversation_participants_user_last_read_idx").on(
+      table.userId,
+      table.lastReadAt,
+    ),
+  ],
+);
+
+/**
+ * Text-only messages. `client_id` is an idempotency key from the sender so a
+ * retried send cannot create a duplicate. Deleted messages stay in place as a
+ * tombstone and never return their content to clients.
+ */
+export const messages = pgTable(
+  "messages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    senderId: uuid("sender_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    clientId: uuid("client_id"),
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("messages_sender_client_unique").on(table.senderId, table.clientId),
+    index("messages_conversation_created_idx").on(
+      table.conversationId,
+      table.createdAt,
+      table.id,
+    ),
+    index("messages_sender_idx").on(table.senderId),
+    check("messages_content_length_check", sql`length(${table.content}) between 1 and 4000`),
+  ],
+);
+
+/**
+ * One row per recipient/actor/type/entity. No email addresses or message text
+ * are copied here; notification text is derived from public profile fields.
+ */
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    recipientId: uuid("recipient_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    actorId: uuid("actor_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    entityId: text("entity_id").notNull().default(""),
+    message: text("message").notNull().default(""),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("notifications_recipient_actor_type_entity_unique").on(
+      table.recipientId,
+      table.actorId,
+      table.type,
+      table.entityId,
+    ),
+    index("notifications_recipient_read_created_idx").on(
+      table.recipientId,
+      table.readAt,
+      table.createdAt,
+    ),
+    index("notifications_recipient_created_idx").on(
+      table.recipientId,
+      table.createdAt,
+    ),
+    index("notifications_actor_idx").on(table.actorId),
+    check(
+      "notifications_type_check",
+      sql`${table.type} in ('follow', 'like', 'comment', 'story_reaction', 'message')`,
+    ),
+    check("notifications_message_length_check", sql`length(${table.message}) <= 200`),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Profile = typeof profiles.$inferSelect;
@@ -362,3 +504,11 @@ export type StoryView = typeof storyViews.$inferSelect;
 export type NewStoryView = typeof storyViews.$inferInsert;
 export type StoryReaction = typeof storyReactions.$inferSelect;
 export type NewStoryReaction = typeof storyReactions.$inferInsert;
+export type Conversation = typeof conversations.$inferSelect;
+export type NewConversation = typeof conversations.$inferInsert;
+export type ConversationParticipant = typeof conversationParticipants.$inferSelect;
+export type NewConversationParticipant = typeof conversationParticipants.$inferInsert;
+export type Message = typeof messages.$inferSelect;
+export type NewMessage = typeof messages.$inferInsert;
+export type Notification = typeof notifications.$inferSelect;
+export type NewNotification = typeof notifications.$inferInsert;

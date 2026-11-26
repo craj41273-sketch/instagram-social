@@ -50,6 +50,13 @@
       "when": 1795649514147,
       "tag": "0006_stories",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1795662317815,
+      "tag": "0007_short_korg",
+      "breakpoints": true
     }
   ]
 }

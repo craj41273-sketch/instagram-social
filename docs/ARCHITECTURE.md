@@ -91,19 +91,20 @@ Block 4 implemented `users` and `profiles`; the expanded Block 5 added profile
 `location`, the constrained `follows` table, and the shared `posts`,
 `post_media`, and `post_hashtags` metadata tables, all with additive migrations
 in `drizzle/`. Media bytes live in Supabase Storage; Neon stores validated
-metadata, ownership, ordering, and constraints. Block 6 completes the
-post/media UI and lifecycle. Block 7 adds `post_likes` and `comments` with
-session-derived ownership and DB-derived counts. Later blocks may add
-`stories`, `story_views`, `conversations`, `messages`, `notifications`, and
-`saved_posts`.
+metadata, ownership, ordering, and constraints. Blocks 6–7 complete the
+post/media UI and engagement with session-derived ownership and DB-derived
+counts. Block 9 adds 24-hour stories; Block 10 adds `conversations`,
+`conversation_participants`, `messages`, and `notifications`. Only saved posts
+remain deferred.
 
 Neon is the only application database. Supabase Auth owns identity; its own
 Postgres is not used as a second app database. Application-level authorization
 uses the DAL and server-derived IDs; service-role access stays confined to
 `lib/auth/server.ts`.
 
-Supabase Realtime will be introduced only for features that need live updates
-(messages, notifications, presence), behind small typed hooks in `hooks/`.
-Because Neon tables are not Supabase Postgres tables, do not assume Supabase
-Postgres Changes observe them — use Broadcast/Presence or a dedicated event
-transport, as documented in `docs/BACKEND.md`.
+Supabase Realtime is used only for live message and notification refresh
+signals, behind small typed hooks in `lib/realtime/`. Because Neon tables are
+not Supabase Postgres tables, Supabase Postgres Changes do not observe them;
+the server publishes opaque Broadcast signals after Neon writes, and clients
+refetch from authenticated APIs. Polling is the fallback, and presence/typing
+state is deliberately absent. Details are in `docs/BACKEND.md`.

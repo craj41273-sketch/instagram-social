@@ -2,9 +2,10 @@
 
 Block 5 provides real public profiles, a secure directed social graph, validated
 avatar/cover uploads, a database-backed post grid/count, social dialogs, and
-suggested accounts. Blocks 1–4 are preserved. Block 7 adds the social feed,
-likes, and comments; stories, messaging, notifications, and save state remain
-out of scope.
+suggested accounts. Blocks 1–4 are preserved. Block 7 added the social feed,
+likes, and comments; Block 9 added stories; Block 10 added one-to-one messages
+and notifications with entry points on profile and people lists. Save state
+remains out of scope.
 
 ## Username authority
 

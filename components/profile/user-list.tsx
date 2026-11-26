@@ -2,6 +2,7 @@ import Link from "next/link";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Card } from "@/components/ui/card";
 import { FollowButton } from "@/components/profile/follow-button";
+import { MessageButton } from "@/components/messaging/message-button";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import type { SocialUserItem } from "@/lib/db/follows";
 
@@ -41,14 +42,23 @@ export function UserListItem({
         </span>
       </Link>
 
-      <FollowButton
-        targetUsername={item.username}
-        initialFollowing={item.isFollowing}
-        isAuthenticated={viewerUsername !== null}
-        isSelf={viewerUsername === item.username}
-        loginHref={loginHref}
-        compact
-      />
+      <div className="flex shrink-0 items-center gap-2">
+        <FollowButton
+          targetUsername={item.username}
+          initialFollowing={item.isFollowing}
+          isAuthenticated={viewerUsername !== null}
+          isSelf={viewerUsername === item.username}
+          loginHref={loginHref}
+          compact
+        />
+        <MessageButton
+          username={item.username}
+          isAuthenticated={viewerUsername !== null}
+          isSelf={viewerUsername === item.username}
+          loginHref={loginHref}
+          compact
+        />
+      </div>
     </li>
   );
 }

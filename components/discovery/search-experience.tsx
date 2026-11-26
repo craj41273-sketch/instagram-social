@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { Heart, Search, X } from "lucide-react";
 import { FollowButton } from "@/components/profile/follow-button";
+import { MessageButton } from "@/components/messaging/message-button";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { ImageContainer } from "@/components/shared/image-container";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -344,14 +345,23 @@ function PeopleResult({
               <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{person.bio}</p>
             ) : null}
           </div>
-          <FollowButton
-            targetUsername={person.username}
-            initialFollowing={person.isFollowing}
-            isAuthenticated
-            isSelf={viewerUsername === person.username}
-            loginHref={`/login?next=${encodeURIComponent(profileHref)}`}
-            compact
-          />
+          <div className="flex shrink-0 items-center gap-1">
+            <FollowButton
+              targetUsername={person.username}
+              initialFollowing={person.isFollowing}
+              isAuthenticated
+              isSelf={viewerUsername === person.username}
+              loginHref={`/login?next=${encodeURIComponent(profileHref)}`}
+              compact
+            />
+            <MessageButton
+              username={person.username}
+              isAuthenticated
+              isSelf={viewerUsername === person.username}
+              loginHref={`/login?next=${encodeURIComponent(profileHref)}`}
+              compact
+            />
+          </div>
         </div>
       </Card>
     </li>
