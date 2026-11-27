@@ -47,7 +47,7 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
   try {
     [post, comments] = await Promise.all([
       getPublicPostById(postId, viewer?.user.id ?? null),
-      listComments(postId, { limit: query.limit, cursor: query.cursor }),
+      listComments(postId, { limit: query.limit, cursor: query.cursor }, viewer?.user.id ?? null),
     ]);
   } catch (error) {
     logServerError("post.page.load", error, { postId });

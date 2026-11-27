@@ -1,5 +1,12 @@
 import type { NotificationType } from "@/lib/messaging/types";
 
+/** Safety notices are visible in the inbox but have no safe destination link. */
+type NavigationNoticeType =
+  | NotificationType
+  | "moderation"
+  | "report_update"
+  | "appeal_update";
+
 /** Destinations are derived only from rows the viewer is allowed to see. */
 
 export interface NotificationTargets {
@@ -11,7 +18,7 @@ export interface NotificationTargets {
 }
 
 export interface NotificationNavigationInput {
-  type: NotificationType;
+  type: NavigationNoticeType;
   entityId: string;
   actorUsername: string;
 }
@@ -38,6 +45,10 @@ export function resolveNotificationHref(
       return targets.conversations.has(notification.entityId)
         ? `/messages/${notification.entityId}`
         : null;
+    case "moderation":
+    case "report_update":
+    case "appeal_update":
+      return null;
     default:
       return null;
   }

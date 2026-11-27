@@ -156,6 +156,23 @@ Status legend: `[x]` complete, `[~]` in progress, `[ ]` planned.
 
 > Migration `drizzle/0007_short_korg.sql` is additive and reviewed but unapplied from this environment. Messaging is text-only and one-to-one; there is no group chat, attachment pipeline, E2E encryption, typing indicator, or presence state. Broadcast is optional and disabled when Supabase service configuration is absent; polling remains the fallback. The rate limiter is per-process, and real remote flows still need credentials.
 
+## Block 11A — Privacy, professional identity, trust, and safety (complete locally)
+
+- [x] Additive schema and migration `drizzle/0008_chubby_the_call.sql`: privacy, professional/links/projects, hypes, risk/history, reports, immutable evidence/access audit, appeals, moderation, audit logs, role/status, follow/conversation requests, relationships, and story audiences
+- [x] Instagram-comparable privacy controls enforced in backend reads/writes: public/private, stories, messages and requests, comments, mentions, hidden words, block/restrict/mute, close friends, and discoverability
+- [x] Optional self-described professional categories, roles, links, and portfolio projects with safe URLs and visibility; no verification or privilege derived from them
+- [x] Authenticated HYPES with one active pair, withdrawal history, and exact `MIN(100, (Valid Trust Hypes / (Eligible Total Users × 0.20)) × 100)` trust with no admin writer or heart/star symbols
+- [x] Independent admin-only risk score with distinct unassessed state, reasons/evidence/audit/history, and no moderator writer
+- [x] Reports for profile/user/post/comment/story/message/conversation with validation, duplicate detection, rate limiting, anonymity to targets, and auditable decisions
+- [x] Bounded both-sided chat evidence snapshots at report time with consent disclosure, media refs, timestamps, participant/sender IDs, and audited authorized access; no chat text in notices or audit logs
+- [x] Staff-only `/admin`, `/admin/reports`, `/admin/reports/[id]`, `/admin/users`, `/admin/users/[id]`, `/admin/appeals`, `/admin/moderation`, and `/admin/audit-logs` with real metrics, high-impact confirmation, and no automatic deletion/punishment
+- [x] `/settings/**`, `/report/**`, `/appeals`, report entry points, navigation/route protection, and technical copy/save discouragement where the browser permits
+- [x] Structural/unit tests for schema, trust formula, risk separation, privacy validation, reports/evidence, admin input, and additive migration
+- [ ] Real Neon/Supabase privacy, report, evidence, risk, appeal, and admin lifecycle tests with credentials
+- [ ] Real browser visual checks at 320/375/430/768/1024/1440 px (no browser automation available here)
+
+> Migration `0008` is additive and reviewed but unapplied from this environment. Report priority is category-derived only, report volume never changes risk or triggers punishment, and the in-process rate limiter still needs a shared store for multi-instance deployments. OS screenshots/screen recording cannot be technically prevented. Blocks 11B and 12 are not started.
+
 ## Block 11 — Polish and hardening
 
 - [ ] Dark/light refinements and responsive audit

@@ -1,5 +1,5 @@
 import "server-only";
-import { sql } from "drizzle-orm";
+import { and, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import {
   follows,
@@ -12,11 +12,14 @@ import {
   users,
 } from "@/lib/db/schema";
 import {
+  buildDiscoverableUserCondition,
   buildPeopleSearchCondition,
   buildPostSearchCondition,
   buildRecentTagCondition,
   buildTrendingCondition,
 } from "@/lib/db/discovery-query";
+import { buildPostVisibilityCondition } from "@/lib/db/post-query";
+import { loadHiddenLikeAuthors } from "@/lib/db/posts";
 import { parseUserId } from "@/lib/db/profile-sql";
 import {
   TRENDING_CANDIDATE_LIMIT,
@@ -39,6 +42,9 @@ import { discoveryQuerySchema } from "@/lib/validations/discovery";
 interface RawRow {
   [key: string]: unknown;
 }
+
+type TrendingCandidateRow = TrendingCandidate &
+  Omit<SearchPost, "postId" | "createdAt"> & { authorUserId: string };
 
 function extractRows(result: unknown): RawRow[] {
   if (Array.isArray(result)) return result as RawRow[];
@@ -114,7 +120,7 @@ export async function searchPeople(
         ${following} AS is_following
       FROM ${users} u
       LEFT JOIN ${profiles} p ON p.user_id = u.id
-      WHERE ${buildPeopleSearchCondition(q)}
+      WHERE ${and(buildPeopleSearchCondition(q), buildDiscoverableUserCondition(viewerUserId))}
       ORDER BY u.username ASC, u.id ASC
       LIMIT ${limit + 1} OFFSET ${offset}
     `);
@@ -141,6 +147,7 @@ export async function searchPeople(
 /** Case-insensitive caption search; count and media come from one bounded query. */
 export async function searchPosts(
   input: { query: string; limit?: number; offset?: number },
+  viewerUserId: string | null = null,
 ): Promise<SearchPage<SearchPost>> {
   const parsed = discoveryQuerySchema.safeParse(input);
   if (!parsed.success) return emptyPage();
@@ -164,19 +171,22 @@ export async function searchPosts(
         (
           SELECT count(*)::int FROM ${postLikes} pl WHERE pl.post_id = posts.id
         ) AS like_count,
+        u.id AS author_id,
         u.username AS author_username,
         coalesce(p.display_name, u.username) AS author_display_name,
         p.avatar_url AS author_avatar_url
       FROM ${posts}
       INNER JOIN ${users} u ON u.id = posts.user_id
       LEFT JOIN ${profiles} p ON p.user_id = u.id
-      WHERE ${buildPostSearchCondition(q)}
+      WHERE ${and(buildPostSearchCondition(q), buildPostVisibilityCondition(viewerUserId))}
       ORDER BY posts.created_at DESC, posts.id DESC
       LIMIT ${limit + 1} OFFSET ${offset}
     `);
 
+    const rows = extractRows(result);
+    const hiddenLikes = await loadHiddenLikeAuthors(rows.map((row) => text(row.author_id)));
     return pageFromRows(
-      extractRows(result),
+      rows,
       limit,
       offset,
       (row): SearchPost => ({
@@ -185,7 +195,10 @@ export async function searchPosts(
         createdAt: toIso(row.cursor),
         thumbnailUrl: nullableText(row.thumbnail_url),
         mediaCount: numeric(row.media_count),
-        likeCount: numeric(row.like_count),
+        likeCount:
+          text(row.author_id) !== viewerUserId && hiddenLikes.has(text(row.author_id))
+            ? 0
+            : numeric(row.like_count),
         authorUsername: text(row.author_username),
         authorDisplayName: text(row.author_display_name),
         authorAvatarUrl: nullableText(row.author_avatar_url),
@@ -198,7 +211,10 @@ export async function searchPosts(
 }
 
 /** Real hashtags from recent posts; no predefined or invented categories. */
-export async function getExploreTags(limit = 8): Promise<ExploreTag[]> {
+export async function getExploreTags(
+  limit = 8,
+  viewerUserId: string | null = null,
+): Promise<ExploreTag[]> {
   const safeLimit = Math.min(12, Math.max(1, Math.floor(limit)));
 
   try {
@@ -206,7 +222,7 @@ export async function getExploreTags(limit = 8): Promise<ExploreTag[]> {
       SELECT h.tag AS tag, count(*)::int AS count
       FROM ${postHashtags} h
       INNER JOIN ${posts} ON posts.id = h.post_id
-      WHERE ${buildRecentTagCondition()}
+      WHERE ${and(buildRecentTagCondition(), buildPostVisibilityCondition(viewerUserId))}
       GROUP BY h.tag
       ORDER BY count DESC, h.tag ASC
       LIMIT ${safeLimit}
@@ -223,7 +239,10 @@ export async function getExploreTags(limit = 8): Promise<ExploreTag[]> {
 }
 
 /** Bounded recent-post candidates ranked from real likes/comments in JS. */
-export async function getTrendingPosts(limit = 6): Promise<TrendingPost[]> {
+export async function getTrendingPosts(
+  limit = 6,
+  viewerUserId: string | null = null,
+): Promise<TrendingPost[]> {
   const safeLimit = Math.min(12, Math.max(1, Math.floor(limit)));
 
   try {
@@ -246,19 +265,23 @@ export async function getTrendingPosts(limit = 6): Promise<TrendingPost[]> {
         (
           SELECT count(*)::int FROM ${comments} c WHERE c.post_id = posts.id
         ) AS comment_count,
+        u.id AS author_id,
         u.username AS author_username,
         coalesce(p.display_name, u.username) AS author_display_name,
         p.avatar_url AS author_avatar_url
       FROM ${posts}
       INNER JOIN ${users} u ON u.id = posts.user_id
       LEFT JOIN ${profiles} p ON p.user_id = u.id
-      WHERE ${buildTrendingCondition()}
+      WHERE ${and(buildTrendingCondition(), buildPostVisibilityCondition(viewerUserId))}
       ORDER BY posts.created_at DESC
       LIMIT ${TRENDING_CANDIDATE_LIMIT}
     `);
 
+    const hiddenLikes = await loadHiddenLikeAuthors(
+      (result.rows ?? []).map((row) => text(row.author_id)),
+    );
     const candidates = (result.rows ?? []).map(
-      (row): TrendingCandidate & Omit<SearchPost, "postId" | "createdAt"> => ({
+      (row): TrendingCandidateRow => ({
         postId: text(row.post_id),
         caption: text(row.caption),
         createdAt: toIso(row.cursor),
@@ -266,6 +289,7 @@ export async function getTrendingPosts(limit = 6): Promise<TrendingPost[]> {
         mediaCount: numeric(row.media_count),
         likeCount: numeric(row.like_count),
         commentCount: numeric(row.comment_count),
+        authorUserId: text(row.author_id),
         authorUsername: text(row.author_username),
         authorDisplayName: text(row.author_display_name),
         authorAvatarUrl: nullableText(row.author_avatar_url),
@@ -279,6 +303,10 @@ export async function getTrendingPosts(limit = 6): Promise<TrendingPost[]> {
         ? [
             {
               ...candidate,
+              likeCount:
+                candidate.authorUserId !== viewerUserId && hiddenLikes.has(candidate.authorUserId)
+                  ? 0
+                  : candidate.likeCount,
               ageHours: ranked.ageHours,
               score: ranked.score,
             },

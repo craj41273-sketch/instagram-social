@@ -56,7 +56,7 @@ export async function GET(request: Request): Promise<Response> {
         : searchPeople({ query: q, limit, offset }, current.user.id),
       tab === "people"
         ? Promise.resolve(emptyPage<SearchPost>())
-        : searchPosts({ query: q, limit, offset }),
+        : searchPosts({ query: q, limit, offset }, current.user.id),
     ]);
 
     return Response.json(

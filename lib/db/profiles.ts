@@ -145,6 +145,23 @@ export async function getPublicProfileByUserId(
   }
 }
 
+/** Authoritative private-account flag; privacy settings do not carry it. */
+export async function isPrivateProfile(userId: string): Promise<boolean> {
+  if (!parseUserId(userId)) return false;
+
+  try {
+    const rows = await getDb()
+      .select({ isPrivate: profiles.isPrivate })
+      .from(profiles)
+      .where(eq(profiles.userId, userId))
+      .limit(1);
+    return rows[0]?.isPrivate ?? false;
+  } catch (error) {
+    logServerError("db.isPrivateProfile", error, { userId });
+    throw new DatabaseError();
+  }
+}
+
 /** Availability check for edits; excludes the owner's own unchanged username. */
 export async function isUsernameAvailableForUser(
   username: string,

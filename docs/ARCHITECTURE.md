@@ -41,8 +41,8 @@ receive serializable props.
 ```text
 app/(site)/           Marketing route group: landing, design system, policy pages
 app/(auth)/           Auth route group: login, signup, recovery, verification
-app/(social)/         Public profiles, owner editor, social lists, post routes
-app/actions/          Authentication, profile, media, follow, and post actions
+app/(social)/         Public profiles, feed/stories/messages, settings, reporting, appeals, admin
+app/actions/          Auth, profile, media, engagement, privacy, professional, trust, reporting, admin actions
 app/api/users/search  Authenticated username lookup foundation
 app/auth/             Supabase PKCE callback and OTP confirmation handlers
 app/                  Root providers, global styles, loading/error/not-found
@@ -54,7 +54,12 @@ components/layout/    Persistent shell: header, footer, page container
 components/shared/    Reusable branded/composite components
 lib/media.ts          Replaceable landing photography sources
 lib/auth/             Supabase clients, DAL, identity mapping, constants
-lib/db/               Drizzle client (`getDb`), schema, profile/follow ops, parameterized SQL
+lib/db/               Drizzle client (`getDb`), schema, domain ops, parameterized SQL
+lib/privacy/          Privacy defaults, relationship/request services, visibility checks
+lib/professional/     Category-aware profile, link, and project reads/writes
+lib/trust/            Exact community trust formula and hype service
+lib/reporting/        Reports, anonymous summaries, bounded immutable evidence
+lib/admin/            Staff authorization, risk, moderation, appeals, audit, metrics
 lib/profile/          Profile action state, display helpers, social list loading
 lib/posts/            Pure caption/hashtag helpers
 lib/pagination.ts     Bounded keyset cursors for social graph and post lists
@@ -94,7 +99,11 @@ in `drizzle/`. Media bytes live in Supabase Storage; Neon stores validated
 metadata, ownership, ordering, and constraints. Blocks 6–7 complete the
 post/media UI and engagement with session-derived ownership and DB-derived
 counts. Block 9 adds 24-hour stories; Block 10 adds `conversations`,
-`conversation_participants`, `messages`, and `notifications`. Only saved posts
+`conversation_participants`, `messages`, and `notifications`. Block 11A adds
+privacy/settings, professional profiles/links/projects, trust hypes, reports and
+bounded evidence, admin risk/moderation/appeals, and audit logs. Staff routes
+are gated from the verified session and Neon role; trust and risk remain
+independent with no volume-based automation. Only saved posts and later polish
 remain deferred.
 
 Neon is the only application database. Supabase Auth owns identity; its own

@@ -2,8 +2,9 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Flag, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { deletePostAction, updatePostAction } from "@/app/actions/posts";
 import { PremiumButton } from "@/components/ui/premium-button";
 import {
@@ -31,6 +32,7 @@ import {
 interface PostActionsProps {
   postId: string;
   caption: string;
+  isOwner: boolean;
   redirectAfterDelete?: string;
 }
 
@@ -64,10 +66,11 @@ function ActionButton({
   );
 }
 
-/** Owner-only edit/delete controls; the server repeats the ownership check. */
+/** Post controls: edit/delete for owners, report for anyone who can see the post. */
 export function PostActions({
   postId,
   caption,
+  isOwner,
   redirectAfterDelete,
 }: PostActionsProps) {
   const router = useRouter();
@@ -115,13 +118,23 @@ export function PostActions({
           </PremiumButton>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={() => setEditOpen(true)}>
-            <Pencil aria-hidden="true" />
-            Edit caption
-          </DropdownMenuItem>
-          <DropdownMenuItem variant="destructive" onSelect={() => setDeleteOpen(true)}>
-            <Trash2 aria-hidden="true" />
-            Delete post
+          {isOwner ? (
+            <>
+              <DropdownMenuItem onSelect={() => setEditOpen(true)}>
+                <Pencil aria-hidden="true" />
+                Edit caption
+              </DropdownMenuItem>
+              <DropdownMenuItem variant="destructive" onSelect={() => setDeleteOpen(true)}>
+                <Trash2 aria-hidden="true" />
+                Delete post
+              </DropdownMenuItem>
+            </>
+          ) : null}
+          <DropdownMenuItem asChild>
+            <Link href={`/report?targetType=post&targetId=${encodeURIComponent(postId)}`}>
+              <Flag aria-hidden="true" />
+              Report post
+            </Link>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

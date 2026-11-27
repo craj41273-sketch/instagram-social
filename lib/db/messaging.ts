@@ -1,15 +1,26 @@
 import "server-only";
-import { and, desc, eq, ne, sql } from "drizzle-orm";
+import { and, desc, eq, ne, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { getDb } from "@/lib/db";
 import {
   conversationParticipants,
+  conversationRequests,
   conversations,
+  follows,
   messages,
+  profilePrivacySettings,
   profiles,
+  userRelationships,
   users,
 } from "@/lib/db/schema";
+import { findUserByUsername } from "@/lib/db/users";
 import { parseUserId } from "@/lib/db/profile-sql";
+import {
+  canMessage,
+  filterHiddenWords,
+  getPrivacyContext,
+  requiresMessageRequest,
+} from "@/lib/privacy/service";
 import {
   buildConversationAccessCondition,
   buildCreateConversationStatement,
@@ -66,6 +77,45 @@ function validateConversationInput(conversationId: string, viewerId: string): vo
   }
 }
 
+/** SQL form of canMessage for batched reads such as the inbox. */
+function canMessagePeerCondition(viewerId: string): SQL {
+  return sql`
+    exists (
+      select 1 from ${users} peer
+      where peer.id = ${users.id} and peer.account_status <> 'banned'
+    )
+    and not exists (
+      select 1 from ${userRelationships} rel
+      where rel.kind = 'block'
+        and (
+          (rel.actor_id = ${viewerId} and rel.target_id = ${users.id})
+          or (rel.actor_id = ${users.id} and rel.target_id = ${viewerId})
+        )
+    )
+    and not exists (
+      select 1 from ${userRelationships} rel
+      where rel.kind = 'restrict'
+        and rel.actor_id = ${users.id} and rel.target_id = ${viewerId}
+    )
+    and coalesce((
+      select settings.who_can_message
+      from ${profilePrivacySettings} settings
+      where settings.user_id = ${users.id}
+    ), 'everyone') <> 'nobody'
+    and (
+      coalesce((
+        select settings.who_can_message
+        from ${profilePrivacySettings} settings
+        where settings.user_id = ${users.id}
+      ), 'everyone') <> 'followers'
+      or exists (
+        select 1 from ${follows} f
+        where f.follower_id = ${viewerId} and f.following_id = ${users.id}
+      )
+    )
+  `;
+}
+
 /** Reuses an existing one-to-one conversation; duplicate clicks are idempotent. */
 export async function createConversation(
   viewerId: string,
@@ -74,10 +124,29 @@ export async function createConversation(
   if (!parseUserId(viewerId)) throw new ValidationError("Invalid account identity.");
 
   try {
+    const target = await findUserByUsername(username.toLowerCase());
+    if (!target || target.id === viewerId) return null;
+    const context = await getPrivacyContext(viewerId, target.id);
+    if (!canMessage(context)) return null;
+
     const result = await getDb().execute(
       buildCreateConversationStatement(viewerId, username),
     );
-    return extractRows<RawRow>(result)[0]?.id as string | undefined ?? null;
+    const conversationId = extractRows<RawRow>(result)[0]?.id as string | undefined ?? null;
+    if (!conversationId) return null;
+
+    if (requiresMessageRequest(context)) {
+      await getDb()
+        .insert(conversationRequests)
+        .values({
+          conversationId,
+          senderId: viewerId,
+          recipientId: target.id,
+          status: "pending",
+        })
+        .onConflictDoNothing();
+    }
+    return conversationId;
   } catch (error) {
     logServerError("db.createConversation", error);
     throw new DatabaseError();
@@ -116,6 +185,10 @@ export async function getConversationHeader(
 
     const row = rows[0];
     if (!row) return null;
+    // No read state is projected; if one is added later, gate it on the peer's
+    // readReceipts setting before exposing it.
+    const context = await getPrivacyContext(viewerId, row.userId);
+    if (!canMessage(context)) return null;
     return { ...row, displayName: row.displayName ?? row.username };
   } catch (error) {
     logServerError("db.getConversationHeader", error, { conversationId });
@@ -185,7 +258,13 @@ export async function listInbox(
       )
       .innerJoin(users, eq(users.id, other.userId))
       .leftJoin(profiles, eq(profiles.userId, users.id))
-      .where(and(eq(conversationParticipants.userId, viewerId), buildInboxCondition(viewerId, cursor)))
+      .where(
+        and(
+          eq(conversationParticipants.userId, viewerId),
+          buildInboxCondition(viewerId, cursor),
+          canMessagePeerCondition(viewerId),
+        ),
+      )
       .orderBy(desc(conversations.lastMessageAt), desc(conversations.id))
       .limit(options.limit + 1);
 
@@ -227,6 +306,8 @@ export async function listMessages(
 ): Promise<MessagePage> {
   validateConversationInput(conversationId, viewerId);
   const cursor = decodePageCursor(options.cursor);
+  const header = await getConversationHeader(conversationId, viewerId);
+  if (!header) return { items: [], nextCursor: null };
 
   try {
     const rows = await getDb()
@@ -245,16 +326,19 @@ export async function listMessages(
 
     const hasMore = rows.length > options.limit;
     const visible = hasMore ? rows.slice(0, options.limit) : rows;
-    const items: MessageItem[] = visible
-      .map((row) => ({
-        id: row.id,
-        conversationId: row.conversationId,
-        senderId: row.senderId,
-        content: row.deletedAt ? "" : row.content,
-        createdAt: toIso(row.createdAt),
-        deleted: row.deletedAt !== null,
-      }))
-      .reverse();
+    const items: MessageItem[] = (
+      await filterHiddenWords(
+        viewerId,
+        visible.map((row) => ({
+          id: row.id,
+          conversationId: row.conversationId,
+          senderId: row.senderId,
+          content: row.deletedAt ? "" : row.content,
+          createdAt: toIso(row.createdAt),
+          deleted: row.deletedAt !== null,
+        })),
+      )
+    ).reverse();
     const oldest = visible.at(-1);
 
     return {

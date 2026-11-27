@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Pause, Play, Trash2, X } from "lucide-react";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
+import { ReportLink } from "@/components/reporting/report-link";
 import { ImageContainer } from "@/components/shared/image-container";
+import { SensitiveSurface } from "@/components/shared/sensitive-surface";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { Spinner } from "@/components/ui/spinner";
@@ -242,7 +244,7 @@ export function StoryViewer({ groups, initialUserId }: StoryViewerProps) {
       aria-modal="true"
       aria-label={`Story from ${group.displayName}`}
     >
-      <div className="relative h-full w-full max-w-[440px] overflow-hidden bg-black sm:h-[min(94vh,900px)] sm:rounded-2xl">
+      <SensitiveSurface className="relative h-full w-full max-w-[440px] overflow-hidden bg-black sm:h-[min(94vh,900px)] sm:rounded-2xl">
         <ImageContainer
           key={story.id}
           alt={story.caption ? `Story: ${story.caption}` : `${group.displayName}'s story`}
@@ -323,6 +325,14 @@ export function StoryViewer({ groups, initialUserId }: StoryViewerProps) {
                 {deleting ? <Spinner /> : <Trash2 />}
               </IconButton>
             ) : null}
+            {!group.isOwn ? (
+              <ReportLink
+                targetType="story"
+                targetId={story.id}
+                isAuthenticated
+                loginHref={`/login?next=${encodeURIComponent(`/stories/${group.userId}`)}`}
+              />
+            ) : null}
             <IconButton
               label={paused ? "Resume story" : "Pause story"}
               aria-label={paused ? "Resume story" : "Pause story"}
@@ -400,7 +410,7 @@ export function StoryViewer({ groups, initialUserId }: StoryViewerProps) {
             </IconButton>
           </div>
         </div>
-      </div>
+      </SensitiveSurface>
     </div>
   );
 }

@@ -41,6 +41,8 @@ export default async function ExplorePage({ searchParams }: ExplorePageProps) {
     logServerError("explore.page.viewer", error);
   }
 
+  const viewerId = viewer?.user.id ?? null;
+
   let page: PublicPostPage | null = null;
   let feedFailed = false;
   try {
@@ -48,6 +50,7 @@ export default async function ExplorePage({ searchParams }: ExplorePageProps) {
       limit: query.limit,
       cursor: query.cursor,
       tag: query.tag,
+      viewerUserId: viewerId,
     });
   } catch (error) {
     logServerError("explore.page.feed", error);
@@ -57,7 +60,7 @@ export default async function ExplorePage({ searchParams }: ExplorePageProps) {
   let tags: ExploreTag[] = [];
   let tagsFailed = false;
   try {
-    tags = await getExploreTags(8);
+    tags = await getExploreTags(8, viewerId);
   } catch (error) {
     logServerError("explore.page.tags", error);
     tagsFailed = true;
@@ -66,7 +69,7 @@ export default async function ExplorePage({ searchParams }: ExplorePageProps) {
   let trending: TrendingPost[] = [];
   let trendingFailed = false;
   try {
-    trending = await getTrendingPosts(6);
+    trending = await getTrendingPosts(6, viewerId);
   } catch (error) {
     logServerError("explore.page.trending", error);
     trendingFailed = true;

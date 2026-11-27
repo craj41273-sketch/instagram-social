@@ -63,6 +63,7 @@ export default async function PostsPage({ searchParams }: PostsPageProps) {
           limit: query.limit,
           cursor: query.cursor,
           tag: query.tag,
+          viewerUserId: null,
         });
   } catch (error) {
     logServerError("posts.page.feed", error, { tagLength: query.tag?.length ?? 0 });

@@ -1,17 +1,20 @@
 import { and, eq, gt, sql, type SQL } from "drizzle-orm";
-import { follows, stories } from "@/lib/db/schema";
+import {
+  closeFriends,
+  follows,
+  stories,
+  storyAudienceEntries,
+  userRelationships,
+  users,
+} from "@/lib/db/schema";
 
 /**
  * Pure, server-side query fragments. Every value stays parameterized so tests
  * can verify expiration and follow visibility without a live database.
  */
 
-/**
- * Active means `expires_at > now`. Viewer access follows the existing feed
- * rule: a user may always read their own stories, otherwise an accepted follow
- * edge is required. No private-account flag exists in the current schema.
- */
-export function buildStoryVisibilityCondition(
+/** Active means `expires_at > now`; owners always see their own stories. */
+export function buildStoryAccessCondition(
   viewerUserId: string,
   nowIso: string,
   targetUserId?: string | null,
@@ -30,6 +33,68 @@ export function buildStoryVisibilityCondition(
 
   if (targetUserId) conditions.push(eq(stories.userId, targetUserId));
   return and(...conditions)!;
+}
+
+/** Audience is per story; blocks and explicit exclusions win over every setting. */
+export function buildStoryAudienceCondition(viewerUserId: string): SQL {
+  return sql`(
+    ${stories.userId} = ${viewerUserId}
+    or (
+      exists (select 1 from ${users} author where author.id = ${stories.userId} and author.account_status <> 'banned')
+      and not exists (
+        select 1 from ${userRelationships} rel
+        where rel.kind = 'block'
+          and (
+            (rel.actor_id = ${viewerUserId} and rel.target_id = ${stories.userId})
+            or (rel.actor_id = ${stories.userId} and rel.target_id = ${viewerUserId})
+          )
+      )
+      and not exists (
+        select 1 from ${storyAudienceEntries} entry
+        where entry.story_id = ${stories.id}
+          and entry.user_id = ${viewerUserId}
+          and entry.kind = 'exclude'
+      )
+      and (
+        (
+          ${stories.audience} = 'followers'
+          and exists (
+            select 1 from ${follows} audience_follow
+            where audience_follow.follower_id = ${viewerUserId}
+              and audience_follow.following_id = ${stories.userId}
+          )
+        )
+        or (
+          ${stories.audience} = 'close_friends'
+          and exists (
+            select 1 from ${closeFriends} friend
+            where friend.owner_id = ${stories.userId} and friend.member_id = ${viewerUserId}
+          )
+        )
+        or (
+          ${stories.audience} = 'custom'
+          and exists (
+            select 1 from ${storyAudienceEntries} include_entry
+            where include_entry.story_id = ${stories.id}
+              and include_entry.user_id = ${viewerUserId}
+              and include_entry.kind = 'include'
+          )
+        )
+      )
+    )
+  )`;
+}
+
+/** Full read visibility: access plus audience/exclusions/blocks. */
+export function buildStoryVisibilityCondition(
+  viewerUserId: string,
+  nowIso: string,
+  targetUserId?: string | null,
+): SQL {
+  return and(
+    buildStoryAccessCondition(viewerUserId, nowIso, targetUserId),
+    buildStoryAudienceCondition(viewerUserId),
+  )!;
 }
 
 /** Ownership predicate shared by viewer-list and delete operations. */

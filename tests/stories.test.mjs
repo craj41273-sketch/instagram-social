@@ -46,6 +46,7 @@ test("Block 9 story schema is additive, indexed, and ownership-safe", () => {
   assert.deepEqual(
     config.columns.map((column) => column.name).sort(),
     [
+      "audience",
       "byte_size",
       "caption",
       "created_at",

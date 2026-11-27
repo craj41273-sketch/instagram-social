@@ -1,7 +1,12 @@
 import "server-only";
 import { getCurrentProfile } from "@/lib/auth/dal";
 import { listFollowers, listFollowing, type SocialUserPage } from "@/lib/db/follows";
-import { getPublicProfileByUsername, type PublicProfile } from "@/lib/db/profiles";
+import {
+  getPublicProfileByUsername,
+  isPrivateProfile,
+  type PublicProfile,
+} from "@/lib/db/profiles";
+import { canViewPosts, getPrivacyContext } from "@/lib/privacy/service";
 import { logServerError } from "@/lib/logging";
 import { parseListLimit } from "@/lib/pagination";
 import { usernameSchema } from "@/lib/validations/auth";
@@ -13,6 +18,7 @@ export interface SocialListData {
   page: SocialUserPage;
   viewerUsername: string | null;
   limit: number;
+  canViewList: boolean;
 }
 
 export type SocialListResult =
@@ -52,20 +58,28 @@ export async function loadSocialList(
   }
 
   const limit = parseListLimit(rawLimit);
-  let page: SocialUserPage;
+  let page: SocialUserPage = { items: [], nextCursor: null };
 
-  try {
-    page =
-      direction === "followers"
-        ? await listFollowers(profile.userId, { viewerUserId: viewerId, limit, cursor: rawCursor })
-        : await listFollowing(profile.userId, { viewerUserId: viewerId, limit, cursor: rawCursor });
-  } catch (error) {
-    logServerError("profile.list.edges", error, { username, direction });
-    return { status: "error", username };
+  const context = await getPrivacyContext(viewerId, profile.userId);
+  const privateProfile = await isPrivateProfile(profile.userId);
+  const canViewList = canViewPosts({
+    ...context,
+    settings: { ...context.settings, isPrivate: privateProfile },
+  });
+  if (canViewList) {
+    try {
+      page =
+        direction === "followers"
+          ? await listFollowers(profile.userId, { viewerUserId: viewerId, limit, cursor: rawCursor })
+          : await listFollowing(profile.userId, { viewerUserId: viewerId, limit, cursor: rawCursor });
+    } catch (error) {
+      logServerError("profile.list.edges", error, { username, direction });
+      return { status: "error", username };
+    }
   }
 
   return {
     status: "ready",
-    data: { profile, page, viewerUsername, limit },
+    data: { profile, page, viewerUsername, limit, canViewList },
   };
 }

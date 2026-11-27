@@ -10,7 +10,13 @@ export const AUTH_ONLY_ROUTES = ["/login", "/signup"] as const;
  * Optimistic proxy protection. Public `/profile/[username]` pages intentionally
  * stay open; authoritative ownership checks still live in the DAL/actions.
  */
-export const PROTECTED_ROUTE_PREFIXES: readonly string[] = ["/profile/edit"];
+export const PROTECTED_ROUTE_PREFIXES: readonly string[] = [
+  "/profile/edit",
+  "/settings",
+  "/appeals",
+  "/report",
+  "/admin",
+];
 
 /**
  * Exact-or-child matching prevents `/profile/editor` from being mistaken for

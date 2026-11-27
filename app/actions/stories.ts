@@ -11,6 +11,11 @@ import {
   getActiveStoryOwnerId,
   recordStoryReactionNotification,
 } from "@/lib/db/notifications";
+import {
+  canReactToStory,
+  canReplyToStory,
+  getPrivacyContext,
+} from "@/lib/privacy/service";
 import { toSafeMessage } from "@/lib/errors";
 import { logServerError } from "@/lib/logging";
 import { consumeRateLimit } from "@/lib/security/rate-limit";
@@ -43,6 +48,10 @@ export async function recordStoryViewAction(storyId: string): Promise<boolean> {
   if (!consumeRateLimit(`stories:view:${viewerId}`, 60, 60_000).allowed) return false;
 
   try {
+    const ownerId = await getActiveStoryOwnerId(parsed.data, viewerId);
+    if (!ownerId) return false;
+    const context = await getPrivacyContext(viewerId, ownerId);
+    if (!canReplyToStory(context)) return false;
     return await recordStoryView(parsed.data, viewerId);
   } catch (error) {
     logServerError("stories.action.view", error, { storyId: parsed.data });
@@ -69,16 +78,22 @@ export async function storyReactionAction(
   }
 
   try {
+    const ownerId = await getActiveStoryOwnerId(parsed.data.storyId, viewerId);
+    if (!ownerId) {
+      return { status: "error", message: "That story is no longer available." };
+    }
+    const context = await getPrivacyContext(viewerId, ownerId);
+    if (!canReactToStory(context)) {
+      return { status: "error", message: "You cannot react to this story." };
+    }
+
     const result = await setStoryReaction(
       parsed.data.storyId,
       viewerId,
       parsed.data.emoji,
     );
     if (result.emoji) {
-      const ownerId = await getActiveStoryOwnerId(parsed.data.storyId);
-      if (ownerId) {
-        await recordStoryReactionNotification(ownerId, viewerId, parsed.data.storyId);
-      }
+      await recordStoryReactionNotification(ownerId, viewerId, parsed.data.storyId);
     }
     return {
       status: "success",

@@ -1,8 +1,10 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -25,6 +27,12 @@ export const users = pgTable(
     email: text("email").notNull(),
     // Always normalized to lowercase by the shared Zod schema.
     username: text("username").notNull().unique(),
+    // Block 11A: role is administrator-controlled and never derived from
+    // professional category, hypes, reports, or risk.
+    role: text("role").notNull().default("user"),
+    accountStatus: text("account_status").notNull().default("active"),
+    suspendedUntil: timestamp("suspended_until", { withTimezone: true }),
+    bannedAt: timestamp("banned_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -43,6 +51,16 @@ export const users = pgTable(
       sql`lower(${table.username}) gin_trgm_ops`,
     ),
     index("users_email_idx").on(table.email),
+    index("users_role_idx").on(table.role),
+    index("users_account_status_idx").on(table.accountStatus),
+    check(
+      "users_role_check",
+      sql`${table.role} in ('user', 'moderator', 'admin')`,
+    ),
+    check(
+      "users_account_status_check",
+      sql`${table.accountStatus} in ('active', 'warning', 'restricted', 'suspended', 'banned')`,
+    ),
   ],
 );
 
@@ -60,6 +78,18 @@ export const profiles = pgTable(
     coverUrl: text("cover_url"),
     website: text("website"),
     location: text("location"),
+    // Block 11A profile identity and audience defaults. Existing rows keep
+    // their data and receive neutral, non-privileged values.
+    isPrivate: boolean("is_private").notNull().default(false),
+    accountCategory: text("account_category").notNull().default("personal"),
+    professionalRoles: jsonb("professional_roles")
+      .$type<string[]>()
+      .notNull()
+      .default([]),
+    professionalDetails: jsonb("professional_details")
+      .$type<Record<string, string | string[]>>()
+      .notNull()
+      .default({}),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -73,6 +103,16 @@ export const profiles = pgTable(
     index("profiles_display_name_trgm_idx").using(
       "gin",
       sql`lower(${table.displayName}) gin_trgm_ops`,
+    ),
+    index("profiles_private_idx").on(table.isPrivate),
+    index("profiles_account_category_idx").on(table.accountCategory),
+    check(
+      "profiles_account_category_check",
+      sql`${table.accountCategory} in (
+        'personal', 'developer', 'company', 'creator', 'marketer', 'freelancer',
+        'ecommerce', 'designer', 'photographer', 'educator', 'founder',
+        'professional', 'organization', 'student', 'other'
+      )`,
     ),
   ],
 );
@@ -259,6 +299,7 @@ export const stories = pgTable(
     byteSize: integer("byte_size").notNull(),
     caption: text("caption").notNull().default(""),
     textOverlay: text("text_overlay"),
+    audience: text("audience").notNull().default("followers"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -277,6 +318,10 @@ export const stories = pgTable(
       table.createdAt,
     ),
     check("stories_media_type_check", sql`${table.mediaType} = 'image'`),
+    check(
+      "stories_audience_check",
+      sql`${table.audience} in ('followers', 'close_friends', 'custom')`,
+    ),
     check("stories_byte_size_check", sql`${table.byteSize} > 0`),
     check("stories_caption_length_check", sql`length(${table.caption}) <= 500`),
     check(
@@ -476,9 +521,612 @@ export const notifications = pgTable(
     index("notifications_actor_idx").on(table.actorId),
     check(
       "notifications_type_check",
-      sql`${table.type} in ('follow', 'like', 'comment', 'story_reaction', 'message')`,
+      sql`${table.type} in (
+        'follow', 'like', 'comment', 'story_reaction', 'message',
+        'moderation', 'report_update', 'appeal_update'
+      )`,
     ),
     check("notifications_message_length_check", sql`length(${table.message}) <= 200`),
+  ],
+);
+
+/** Per-user privacy configuration. One row is created lazily on first edit. */
+export const profilePrivacySettings = pgTable(
+  "profile_privacy_settings",
+  {
+    userId: uuid("user_id")
+      .primaryKey()
+      .references(() => users.id, { onDelete: "cascade" }),
+    whoCanMessage: text("who_can_message").notNull().default("everyone"),
+    messageRequestsEnabled: boolean("message_requests_enabled")
+      .notNull()
+      .default(true),
+    readReceipts: boolean("read_receipts").notNull().default(true),
+    activityStatus: boolean("activity_status").notNull().default(true),
+    conversationPrivacy: text("conversation_privacy")
+      .notNull()
+      .default("participants"),
+    whoCanComment: text("who_can_comment").notNull().default("everyone"),
+    commentsEnabled: boolean("comments_enabled").notNull().default(true),
+    mentionPermission: text("mention_permission").notNull().default("everyone"),
+    tagApproval: boolean("tag_approval").notNull().default(false),
+    discoverable: boolean("discoverable").notNull().default(true),
+    contactVisibility: text("contact_visibility").notNull().default("followers"),
+    profileInfoVisibility: text("profile_info_visibility")
+      .notNull()
+      .default("everyone"),
+    hideLikeCounts: boolean("hide_like_counts").notNull().default(false),
+    hideViewCounts: boolean("hide_view_counts").notNull().default(false),
+    hiddenWords: jsonb("hidden_words").$type<string[]>().notNull().default([]),
+    storyAudience: text("story_audience").notNull().default("followers"),
+    storyReplies: text("story_replies").notNull().default("everyone"),
+    storyInteractions: text("story_interactions").notNull().default("everyone"),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    check(
+      "privacy_who_can_message_check",
+      sql`${table.whoCanMessage} in ('everyone', 'followers', 'nobody')`,
+    ),
+    check(
+      "privacy_conversation_privacy_check",
+      sql`${table.conversationPrivacy} in ('participants', 'followers')`,
+    ),
+    check(
+      "privacy_who_can_comment_check",
+      sql`${table.whoCanComment} in ('everyone', 'followers', 'followed', 'nobody')`,
+    ),
+    check(
+      "privacy_mention_permission_check",
+      sql`${table.mentionPermission} in ('everyone', 'followed', 'nobody')`,
+    ),
+    check(
+      "privacy_contact_visibility_check",
+      sql`${table.contactVisibility} in ('everyone', 'followers', 'nobody')`,
+    ),
+    check(
+      "privacy_profile_info_visibility_check",
+      sql`${table.profileInfoVisibility} in ('everyone', 'followers')`,
+    ),
+    check(
+      "privacy_story_audience_check",
+      sql`${table.storyAudience} in ('followers', 'close_friends', 'custom')`,
+    ),
+    check(
+      "privacy_story_controls_check",
+      sql`${table.storyReplies} in ('everyone', 'followers', 'nobody')
+        and ${table.storyInteractions} in ('everyone', 'followers', 'nobody')`,
+    ),
+  ],
+);
+
+/** Bidirectional close-friend membership: owner explicitly selects members. */
+export const closeFriends = pgTable(
+  "close_friends",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("close_friends_owner_member_unique").on(table.ownerId, table.memberId),
+    index("close_friends_owner_idx").on(table.ownerId),
+    check("close_friends_no_self_check", sql`${table.ownerId} <> ${table.memberId}`),
+  ],
+);
+
+/** Per-story include/exclude lists enforce custom audiences and hidden users. */
+export const storyAudienceEntries = pgTable(
+  "story_audience_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    storyId: uuid("story_id")
+      .notNull()
+      .references(() => stories.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("story_audience_story_user_kind_unique").on(
+      table.storyId,
+      table.userId,
+      table.kind,
+    ),
+    index("story_audience_story_idx").on(table.storyId),
+    index("story_audience_user_idx").on(table.userId),
+    check("story_audience_kind_check", sql`${table.kind} in ('include', 'exclude')`),
+  ],
+);
+
+/** Block, restrict, and mute are separate actor-owned controls. */
+export const userRelationships = pgTable(
+  "user_relationships",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    actorId: uuid("actor_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    targetId: uuid("target_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("user_relationships_actor_target_kind_unique").on(
+      table.actorId,
+      table.targetId,
+      table.kind,
+    ),
+    index("user_relationships_target_idx").on(table.targetId),
+    index("user_relationships_kind_idx").on(table.kind),
+    check(
+      "user_relationships_kind_check",
+      sql`${table.kind} in ('block', 'restrict', 'mute')`,
+    ),
+    check("user_relationships_no_self_check", sql`${table.actorId} <> ${table.targetId}`),
+  ],
+);
+
+/** Follow requests replace direct follow creation only for private accounts. */
+export const followRequests = pgTable(
+  "follow_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    requesterId: uuid("requester_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    targetId: uuid("target_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    status: text("status").notNull().default("pending"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("follow_requests_requester_target_unique").on(
+      table.requesterId,
+      table.targetId,
+    ),
+    index("follow_requests_target_status_idx").on(table.targetId, table.status),
+    index("follow_requests_requester_status_idx").on(table.requesterId, table.status),
+    check(
+      "follow_requests_status_check",
+      sql`${table.status} in ('pending', 'accepted', 'declined', 'cancelled')`,
+    ),
+    check("follow_requests_no_self_check", sql`${table.requesterId} <> ${table.targetId}`),
+  ],
+);
+
+/** Safe external identity links; ownership is never implied by a link row. */
+export const profileLinks = pgTable(
+  "profile_links",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    label: text("label").notNull(),
+    url: text("url").notNull(),
+    linkType: text("link_type").notNull(),
+    icon: text("icon"),
+    position: integer("position").notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+    visibility: text("visibility").notNull().default("everyone"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("profile_links_user_position_idx").on(table.userId, table.position),
+    check("profile_links_label_check", sql`length(${table.label}) between 1 and 80`),
+    check("profile_links_url_check", sql`length(${table.url}) between 1 and 500`),
+    check("profile_links_position_check", sql`${table.position} between 0 and 100`),
+    check(
+      "profile_links_visibility_check",
+      sql`${table.visibility} in ('everyone', 'followers')`,
+    ),
+  ],
+);
+
+/** Optional category-aware portfolio entries; all URLs are validated in Zod. */
+export const portfolioProjects = pgTable(
+  "portfolio_projects",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    description: text("description").notNull().default(""),
+    imageUrl: text("image_url"),
+    technologies: jsonb("technologies").$type<string[]>().notNull().default([]),
+    skills: jsonb("skills").$type<string[]>().notNull().default([]),
+    liveUrl: text("live_url"),
+    repositoryUrl: text("repository_url"),
+    portfolioUrl: text("portfolio_url"),
+    status: text("status").notNull().default("completed"),
+    position: integer("position").notNull(),
+    featured: boolean("featured").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("portfolio_projects_user_position_idx").on(table.userId, table.position),
+    index("portfolio_projects_user_featured_idx").on(table.userId, table.featured),
+    check("portfolio_projects_title_check", sql`length(${table.title}) between 1 and 120`),
+    check("portfolio_projects_description_check", sql`length(${table.description}) <= 2000`),
+    check("portfolio_projects_position_check", sql`${table.position} between 0 and 100`),
+    check(
+      "portfolio_projects_status_check",
+      sql`${table.status} in ('planned', 'in_progress', 'completed', 'archived')`,
+    ),
+  ],
+);
+
+/**
+ * One durable hype per giver/target pair. Withdrawal changes state; the row
+ * remains so reversal cannot be replayed into duplicate active hypes.
+ */
+export const trustHypes = pgTable(
+  "trust_hypes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    giverId: uuid("giver_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    targetId: uuid("target_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    state: text("state").notNull().default("active"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("trust_hypes_giver_target_unique").on(table.giverId, table.targetId),
+    index("trust_hypes_target_state_idx").on(table.targetId, table.state),
+    check("trust_hypes_state_check", sql`${table.state} in ('active', 'withdrawn')`),
+    check("trust_hypes_no_self_check", sql`${table.giverId} <> ${table.targetId}`),
+  ],
+);
+
+/** Current admin risk assessment; absence is the distinct unassessed state. */
+export const riskAssessments = pgTable(
+  "risk_assessments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .unique()
+      .references(() => users.id, { onDelete: "cascade" }),
+    score: integer("score").notNull(),
+    reason: text("reason").notNull(),
+    evidenceRefs: jsonb("evidence_refs").$type<string[]>().notNull().default([]),
+    assessedBy: uuid("assessed_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    assessedAt: timestamp("assessed_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("risk_assessments_user_id_idx").on(table.userId),
+    index("risk_assessments_score_idx").on(table.score),
+    check("risk_assessments_score_check", sql`${table.score} between 0 and 100`),
+    check("risk_assessments_reason_check", sql`length(${table.reason}) between 1 and 1000`),
+  ],
+);
+
+/** Append-only history for every admin risk set, change, and removal. */
+export const riskAssessmentHistory = pgTable(
+  "risk_assessment_history",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    actorId: uuid("actor_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    action: text("action").notNull(),
+    previousScore: integer("previous_score"),
+    score: integer("score"),
+    reason: text("reason").notNull(),
+    evidenceRefs: jsonb("evidence_refs").$type<string[]>().notNull().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("risk_history_user_created_idx").on(table.userId, table.createdAt),
+    check("risk_history_action_check", sql`${table.action} in ('set', 'remove')`),
+    check("risk_history_reason_check", sql`length(${table.reason}) between 1 and 1000`),
+  ],
+);
+
+/** Moderation queue. Reporter identity is stored but never sent to targets. */
+export const reports = pgTable(
+  "reports",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    reporterId: uuid("reporter_id")
+      .references(() => users.id, { onDelete: "set null" }),
+    targetType: text("target_type").notNull(),
+    targetId: text("target_id").notNull(),
+    category: text("category").notNull(),
+    reason: text("reason"),
+    explanation: text("explanation").notNull().default(""),
+    status: text("status").notNull().default("pending"),
+    priority: text("priority").notNull().default("normal"),
+    assigneeId: uuid("assignee_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    resolutionNotes: text("resolution_notes").notNull().default(""),
+    resolvedBy: uuid("resolved_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("reports_duplicate_idx").on(
+      table.reporterId,
+      table.targetType,
+      table.targetId,
+      table.category,
+    ),
+    index("reports_status_priority_created_idx").on(
+      table.status,
+      table.priority,
+      table.createdAt,
+    ),
+    index("reports_target_idx").on(table.targetType, table.targetId),
+    index("reports_assignee_idx").on(table.assigneeId),
+    check(
+      "reports_target_type_check",
+      sql`${table.targetType} in ('user', 'post', 'comment', 'story', 'message', 'conversation')`,
+    ),
+    check(
+      "reports_category_check",
+      sql`${table.category} in (
+        'spam', 'scam_fraud', 'harassment', 'bullying', 'hate_speech',
+        'threats_violence', 'impersonation', 'sexual_content', 'exploitation',
+        'child_safety', 'privacy_violation', 'self_harm', 'dangerous_content',
+        'intellectual_property', 'other'
+      )`,
+    ),
+    check(
+      "reports_status_check",
+      sql`${table.status} in ('pending', 'reviewing', 'escalated', 'resolved', 'dismissed')`,
+    ),
+    check(
+      "reports_priority_check",
+      sql`${table.priority} in ('low', 'normal', 'high', 'urgent')`,
+    ),
+    check("reports_explanation_check", sql`length(${table.explanation}) <= 2000`),
+  ],
+);
+
+/** Immutable evidence attached to a report; no update endpoint exists. */
+export const reportEvidence = pgTable(
+  "report_evidence",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    reportId: uuid("report_id")
+      .notNull()
+      .references(() => reports.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    capturedAt: timestamp("captured_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("report_evidence_report_idx").on(table.reportId),
+    check("report_evidence_kind_check", sql`${table.kind} in ('chat_snapshot', 'target')`),
+  ],
+);
+
+/** Every evidence view or private note is attributed to a staff member. */
+export const reportEvidenceAccess = pgTable(
+  "report_evidence_access",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    reportId: uuid("report_id")
+      .notNull()
+      .references(() => reports.id, { onDelete: "cascade" }),
+    actorId: uuid("actor_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    action: text("action").notNull(),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("report_evidence_access_report_created_idx").on(table.reportId, table.createdAt),
+    check("report_evidence_access_action_check", sql`${table.action} in ('view', 'note')`),
+  ],
+);
+
+/** Authoritative moderation history with reasons, actor, targets, and expiry. */
+export const moderationActions = pgTable(
+  "moderation_actions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    actorId: uuid("actor_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    reportId: uuid("report_id").references(() => reports.id, {
+      onDelete: "set null",
+    }),
+    action: text("action").notNull(),
+    reason: text("reason").notNull(),
+    targetType: text("target_type"),
+    targetId: text("target_id"),
+    evidenceRefs: jsonb("evidence_refs").$type<string[]>().notNull().default([]),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("moderation_actions_user_created_idx").on(table.userId, table.createdAt),
+    index("moderation_actions_report_idx").on(table.reportId),
+    check(
+      "moderation_actions_action_check",
+      sql`${table.action} in (
+        'warning', 'restrict', 'suspend', 'ban', 'restore', 'remove_content',
+        'dismiss_report', 'resolve_report', 'escalate_report'
+      )`,
+    ),
+    check("moderation_actions_reason_check", sql`length(${table.reason}) between 1 and 1000`),
+  ],
+);
+
+/** User appeals against a specific moderation decision. */
+export const appeals = pgTable(
+  "appeals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    moderationActionId: uuid("moderation_action_id").references(
+      () => moderationActions.id,
+      { onDelete: "set null" },
+    ),
+    reportId: uuid("report_id").references(() => reports.id, {
+      onDelete: "set null",
+    }),
+    reason: text("reason").notNull(),
+    status: text("status").notNull().default("pending"),
+    resolution: text("resolution").notNull().default(""),
+    reviewedBy: uuid("reviewed_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("appeals_status_created_idx").on(table.status, table.createdAt),
+    index("appeals_user_idx").on(table.userId),
+    check("appeals_status_check", sql`${table.status} in ('pending', 'approved', 'rejected')`),
+    check("appeals_reason_check", sql`length(${table.reason}) between 10 and 2000`),
+  ],
+);
+
+/** Append-only audit trail for privileged actions; never holds chat content. */
+export const auditLogs = pgTable(
+  "audit_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    actorId: uuid("actor_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    action: text("action").notNull(),
+    entityType: text("entity_type").notNull(),
+    entityId: text("entity_id").notNull(),
+    details: jsonb("details").$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("audit_logs_created_idx").on(table.createdAt),
+    index("audit_logs_actor_created_idx").on(table.actorId, table.createdAt),
+    index("audit_logs_entity_idx").on(table.entityType, table.entityId),
+    check("audit_logs_action_check", sql`length(${table.action}) between 1 and 120`),
+  ],
+);
+
+/** Permission-gated conversation requests; accepted requests become normal DMs. */
+export const conversationRequests = pgTable(
+  "conversation_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    senderId: uuid("sender_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    recipientId: uuid("recipient_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    status: text("status").notNull().default("pending"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("conversation_requests_conversation_sender_unique").on(
+      table.conversationId,
+      table.senderId,
+    ),
+    index("conversation_requests_recipient_status_idx").on(
+      table.recipientId,
+      table.status,
+    ),
+    check(
+      "conversation_requests_status_check",
+      sql`${table.status} in ('pending', 'accepted', 'declined')`,
+    ),
+    check(
+      "conversation_requests_no_self_check",
+      sql`${table.senderId} <> ${table.recipientId}`,
+    ),
   ],
 );
 
@@ -512,3 +1160,20 @@ export type Message = typeof messages.$inferSelect;
 export type NewMessage = typeof messages.$inferInsert;
 export type Notification = typeof notifications.$inferSelect;
 export type NewNotification = typeof notifications.$inferInsert;
+export type ProfilePrivacySettings = typeof profilePrivacySettings.$inferSelect;
+export type CloseFriend = typeof closeFriends.$inferSelect;
+export type StoryAudienceEntry = typeof storyAudienceEntries.$inferSelect;
+export type UserRelationship = typeof userRelationships.$inferSelect;
+export type FollowRequest = typeof followRequests.$inferSelect;
+export type ProfileLink = typeof profileLinks.$inferSelect;
+export type PortfolioProject = typeof portfolioProjects.$inferSelect;
+export type TrustHype = typeof trustHypes.$inferSelect;
+export type RiskAssessment = typeof riskAssessments.$inferSelect;
+export type RiskAssessmentHistory = typeof riskAssessmentHistory.$inferSelect;
+export type Report = typeof reports.$inferSelect;
+export type ReportEvidence = typeof reportEvidence.$inferSelect;
+export type ReportEvidenceAccess = typeof reportEvidenceAccess.$inferSelect;
+export type ModerationAction = typeof moderationActions.$inferSelect;
+export type Appeal = typeof appeals.$inferSelect;
+export type AuditLog = typeof auditLogs.$inferSelect;
+export type ConversationRequest = typeof conversationRequests.$inferSelect;

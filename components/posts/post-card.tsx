@@ -61,11 +61,12 @@ export function PostCard({
             {edited ? <span> · edited</span> : null}
           </p>
         </div>
-        {isOwner ? (
+        {viewerUserId ? (
           <CardAction>
             <PostActions
               postId={post.id}
               caption={post.caption}
+              isOwner={isOwner}
               redirectAfterDelete={redirectAfterDelete}
             />
           </CardAction>

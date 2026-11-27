@@ -18,12 +18,20 @@ resolve through session-derived IDs or this one field.
 ## Schema
 
 ```text
-users (existing)
-  id, auth_user_id, email, username, created_at, updated_at
+users (existing + Block 11A moderation state)
+  id, auth_user_id, email, username, role, account_status,
+  suspended_until, banned_at, created_at, updated_at
 
-profiles (existing + location)
+profiles (existing + location + Block 11A identity)
   id, user_id -> users.id (unique, cascade), display_name,
-  bio, avatar_url, cover_url, website, location, created_at, updated_at
+  bio, avatar_url, cover_url, website, location, is_private,
+  account_category, professional_roles, professional_details,
+  created_at, updated_at
+
+profile_links / portfolio_projects (Block 11A)
+  owner-scoped, ordered, visibility-controlled external links and projects;
+  every URL is validated as absolute HTTP(S) by Zod. Professional fields are
+  self-described and grant no verification or privilege.
 
 follows (Block 5)
   id uuid PK default gen_random_uuid()
@@ -73,6 +81,7 @@ No remote migration was applied from this environment. Apply with
 | `/profile/[username]/followers` | Public | Cursor-paginated fallback page for follower list |
 | `/profile/[username]/following` | Public | Cursor-paginated fallback page for following list |
 | `/profile/edit` | Authenticated owner | Avatar/cover uploads plus public detail editing |
+| `/settings/**` | Authenticated owner | Privacy, professional category, links, projects, and trust controls (Block 11A) |
 | `/api/users/search?q=…` | Authenticated | Bounded, rate-limited username prefix lookup |
 | `/posts`, `/post/[postId]` | Public | Completed in Block 6 |
 
@@ -166,6 +175,9 @@ the service-role key is not used for uploads.
 - Object keys are namespaced by the verified auth user and stripped of `..`.
 - Sensitive operations use the existing in-process rate limiter; a shared store
   is required for multi-instance production.
+- Block 11A privacy and relationship checks are enforced in backend reads and
+  writes; private accounts hide posts/media from non-followers while keeping a
+  public profile shell. Professional identity is never a trust or role signal.
 
 ## Tests and limitations
 

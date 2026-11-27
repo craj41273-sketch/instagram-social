@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { ArrowLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, ChevronRight, LockKeyhole } from "lucide-react";
+import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorState } from "@/components/shared/error-state";
 import { PageContainer } from "@/components/layout/page-container";
 import { PremiumButton } from "@/components/ui/premium-button";
@@ -13,6 +14,7 @@ interface SocialListViewProps {
   page: SocialUserPage;
   viewerUsername: string | null;
   nextHref: string | null;
+  hidden?: boolean;
 }
 
 /** Shared presentation for follower and following pagination pages. */
@@ -22,6 +24,7 @@ export function SocialListView({
   page,
   viewerUsername,
   nextHref,
+  hidden = false,
 }: SocialListViewProps) {
   const title = direction === "followers" ? "Followers" : "Following";
 
@@ -43,16 +46,24 @@ export function SocialListView({
         </div>
       </div>
 
-      <UserList
-        items={page.items}
-        viewerUsername={viewerUsername}
-        emptyTitle={direction === "followers" ? "No followers yet" : "Not following anyone yet"}
-        emptyDescription={
-          direction === "followers"
-            ? `When people follow @${username}, they will appear here.`
-            : `When @${username} follows people, they will appear here.`
-        }
-      />
+      {hidden ? (
+        <EmptyState
+          icon={LockKeyhole}
+          title="This list is private"
+          description={`Follow @${username} to see their connections.`}
+        />
+      ) : (
+        <UserList
+          items={page.items}
+          viewerUsername={viewerUsername}
+          emptyTitle={direction === "followers" ? "No followers yet" : "Not following anyone yet"}
+          emptyDescription={
+            direction === "followers"
+              ? `When people follow @${username}, they will appear here.`
+              : `When @${username} follows people, they will appear here.`
+          }
+        />
+      )}
 
       {nextHref ? (
         <div className="flex justify-center">

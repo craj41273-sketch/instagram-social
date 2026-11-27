@@ -6,6 +6,7 @@ import {
   postHashtags,
   postMedia,
   posts,
+  profilePrivacySettings,
   profiles,
   users,
   type NewPostMedia,
@@ -13,10 +14,12 @@ import {
 import {
   buildPostPageCondition,
   buildPostPageOrder,
+  buildPostVisibilityCondition,
   buildSocialFeedCondition,
   postCursorTimestamp,
 } from "@/lib/db/post-query";
 import { parseUserId } from "@/lib/db/profile-sql";
+import { filterCommentsForViewer } from "@/lib/db/engagement";
 import { DatabaseError, ValidationError } from "@/lib/errors";
 import { logServerError } from "@/lib/logging";
 import { decodePageCursor, encodePageCursor } from "@/lib/pagination";
@@ -122,6 +125,22 @@ function safeLimit(value: number | undefined, fallback: number): number {
   return Math.min(24, Math.max(1, Math.floor(value ?? fallback)));
 }
 
+/** One batched lookup keeps count suppression out of per-post queries. */
+export async function loadHiddenLikeAuthors(authorIds: string[]): Promise<Set<string>> {
+  const ids = [...new Set(authorIds)].filter(parseUserId);
+  if (ids.length === 0) return new Set();
+  const rows = await getDb()
+    .select({ userId: profilePrivacySettings.userId })
+    .from(profilePrivacySettings)
+    .where(
+      and(
+        inArray(profilePrivacySettings.userId, ids),
+        eq(profilePrivacySettings.hideLikeCounts, true),
+      ),
+    );
+  return new Set(rows.map((row) => row.userId));
+}
+
 /** Counts real post rows for the profile stat. */
 export async function getPostCountByUserId(userId: string): Promise<number> {
   if (!parseUserId(userId)) throw new ValidationError("Invalid account identity.");
@@ -140,13 +159,16 @@ export async function getPostCountByUserId(userId: string): Promise<number> {
 /** First page of real posts for a public profile grid. */
 export async function listProfilePosts(
   userId: string,
-  options: { limit?: number; cursor?: string | null } = {},
+  options: { limit?: number; cursor?: string | null; viewerUserId?: string | null } = {},
 ): Promise<ProfilePostPage> {
   if (!parseUserId(userId)) throw new ValidationError("Invalid account identity.");
 
   const limit = safeLimit(options.limit, 12);
   const cursor = decodePageCursor(options.cursor);
-  const condition = buildPostPageCondition(eq(posts.userId, userId), cursor);
+  const condition = and(
+    buildPostPageCondition(eq(posts.userId, userId), cursor),
+    buildPostVisibilityCondition(options.viewerUserId ?? null),
+  )!;
 
   try {
     const result = await getDb().execute<RawRow>(sql`
@@ -329,6 +351,7 @@ async function loadHashtagsForPosts(postIds: string[]): Promise<Map<string, stri
 /** Bounded newest-comment previews, batched for a whole feed page. */
 async function loadCommentPreviews(
   postIds: string[],
+  viewerUserId: string | null,
 ): Promise<Map<string, CommentPreview[]>> {
   const map = new Map<string, CommentPreview[]>();
   if (postIds.length === 0) return map;
@@ -336,6 +359,7 @@ async function loadCommentPreviews(
   const rows = await getDb()
     .select({
       postId: comments.postId,
+      userId: comments.userId,
       id: comments.id,
       content: comments.content,
       createdAt: comments.createdAt,
@@ -348,16 +372,26 @@ async function loadCommentPreviews(
     .where(inArray(comments.postId, postIds))
     .orderBy(asc(comments.postId), desc(comments.createdAt), desc(comments.id));
 
-  for (const row of rows) {
+  const visible = await filterCommentsForViewer(
+    rows.map((row) => ({
+      postId: row.postId,
+      userId: row.userId,
+      content: row.content,
+      preview: {
+        id: row.id,
+        username: row.username,
+        displayName: row.displayName ?? row.username,
+        content: row.content,
+        createdAt: toIso(row.createdAt),
+      },
+    })),
+    viewerUserId,
+  );
+
+  for (const row of visible) {
     const list = map.get(row.postId) ?? [];
     if (list.length >= 2) continue;
-    list.push({
-      id: row.id,
-      username: row.username,
-      displayName: row.displayName ?? row.username,
-      content: row.content,
-      createdAt: toIso(row.createdAt),
-    });
+    list.push(row.preview);
     map.set(row.postId, list);
   }
   return map;
@@ -382,6 +416,7 @@ function toPublicPost(
   media: PublicPostMedia[],
   hashtags: string[],
   previews: CommentPreview[] = [],
+  hideLikeCount = false,
 ): PublicPost {
   return {
     id: row.post_id,
@@ -396,7 +431,7 @@ function toPublicPost(
     createdAt: toIso(row.cursor),
     updatedAt: toIso(row.updated_at),
     media: media.slice().sort((a, b) => a.position - b.position),
-    likeCount: numeric(row.like_count),
+    likeCount: hideLikeCount ? 0 : numeric(row.like_count),
     likedByViewer: row.liked_by_viewer === true,
     commentCount: numeric(row.comment_count),
     commentPreviews: previews,
@@ -450,10 +485,11 @@ async function loadPostPage(
   const hasMore = rows.length > limit;
   const pageRows = rows.slice(0, limit);
   const ids = pageRows.map((row) => row.post_id);
-  const [media, hashtags, previews] = await Promise.all([
+  const [media, hashtags, previews, hiddenLikes] = await Promise.all([
     loadMediaForPosts(ids),
     loadHashtagsForPosts(ids),
-    loadCommentPreviews(ids),
+    loadCommentPreviews(ids, viewerUserId),
+    loadHiddenLikeAuthors(pageRows.map((row) => row.author_id)),
   ]);
 
   const items = pageRows.map((row) =>
@@ -462,6 +498,7 @@ async function loadPostPage(
       media.get(row.post_id) ?? [],
       hashtags.get(row.post_id) ?? [],
       previews.get(row.post_id) ?? [],
+      row.author_id !== viewerUserId && hiddenLikes.has(row.author_id),
     ),
   );
   const lastRow = pageRows.at(-1);
@@ -487,15 +524,17 @@ export async function getPublicPostById(
       SELECT ${postAuthorColumns(viewerUserId)}
       ${POST_AUTHOR_JOIN}
       WHERE "posts"."id" = ${postId}
+        AND ${buildPostVisibilityCondition(viewerUserId)}
       LIMIT 1
     `);
     const row = extractRows<PostWithAuthorRow>(result)[0];
     if (!row) return null;
 
-    const [media, hashtags, previews] = await Promise.all([
+    const [media, hashtags, previews, hiddenLikes] = await Promise.all([
       loadMediaForPosts([postId]),
       loadHashtagsForPosts([postId]),
-      loadCommentPreviews([postId]),
+      loadCommentPreviews([postId], viewerUserId),
+      loadHiddenLikeAuthors([row.author_id]),
     ]);
 
     return toPublicPost(
@@ -503,6 +542,7 @@ export async function getPublicPostById(
       media.get(postId) ?? [],
       hashtags.get(postId) ?? [],
       previews.get(postId) ?? [],
+      row.author_id !== viewerUserId && hiddenLikes.has(row.author_id),
     );
   } catch (error) {
     logServerError("db.getPublicPostById", error, { postId });
@@ -512,17 +552,26 @@ export async function getPublicPostById(
 
 /** Public recent-post feed used for anonymous visitors. */
 export async function listRecentPosts(
-  options: { limit?: number; cursor?: string | null; tag?: string | null } = {},
+  options: {
+    limit?: number;
+    cursor?: string | null;
+    tag?: string | null;
+    viewerUserId?: string | null;
+  } = {},
 ): Promise<PublicPostPage> {
   const limit = safeLimit(options.limit, 12);
   const cursor = decodePageCursor(options.cursor);
   const tag = options.tag?.toLowerCase() || null;
+  const viewerUserId = options.viewerUserId ?? null;
 
   try {
     return await loadPostPage(
-      buildPostPageCondition(sql`true`, cursor, tag),
+      and(
+        buildPostPageCondition(sql`true`, cursor, tag),
+        buildPostVisibilityCondition(viewerUserId),
+      )!,
       limit,
-      null,
+      viewerUserId,
     );
   } catch (error) {
     logServerError("db.listRecentPosts", error, { tagLength: tag?.length ?? 0 });
@@ -549,7 +598,10 @@ export async function listFeedPosts(
 
   try {
     return await loadPostPage(
-      buildSocialFeedCondition(options.viewerUserId, cursor, tag),
+      and(
+        buildSocialFeedCondition(options.viewerUserId, cursor, tag),
+        buildPostVisibilityCondition(options.viewerUserId),
+      )!,
       limit,
       options.viewerUserId,
     );
@@ -613,7 +665,7 @@ export async function updateOwnPost(
       .delete(postHashtags)
       .where(eq(postHashtags.postId, postId));
     await insertPostHashtags(postId, extractHashtags(caption));
-    return getPublicPostById(postId);
+    return getPublicPostById(postId, userId);
   } catch (error) {
     logServerError("db.updateOwnPost", error, { postId, userId });
     throw new DatabaseError();

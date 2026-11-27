@@ -20,6 +20,7 @@ export interface FollowActionState {
   message?: string;
   /** Present only after a confirmed server-side mutation. */
   following?: boolean;
+  requested?: boolean;
 }
 
 export function initialFollowActionState(): FollowActionState {

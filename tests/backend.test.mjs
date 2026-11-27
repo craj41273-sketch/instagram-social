@@ -42,20 +42,35 @@ test("foundational users and profiles retain expected columns", () => {
   assert.equal(userConfig.name, "users");
   assert.deepEqual(
     userConfig.columns.map((column) => column.name).sort(),
-    ["auth_user_id", "created_at", "email", "id", "updated_at", "username"],
+    [
+      "account_status",
+      "auth_user_id",
+      "banned_at",
+      "created_at",
+      "email",
+      "id",
+      "role",
+      "suspended_until",
+      "updated_at",
+      "username",
+    ],
   );
 
   assert.equal(profileConfig.name, "profiles");
   assert.deepEqual(
     profileConfig.columns.map((column) => column.name).sort(),
     [
+      "account_category",
       "avatar_url",
       "bio",
       "cover_url",
       "created_at",
       "display_name",
       "id",
+      "is_private",
       "location",
+      "professional_details",
+      "professional_roles",
       "updated_at",
       "user_id",
       "website",

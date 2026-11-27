@@ -4,6 +4,7 @@ import { getDb } from "@/lib/db";
 import {
   profiles,
   stories,
+  storyAudienceEntries,
   storyViews,
   users,
   type NewStory,
@@ -26,6 +27,11 @@ import {
   buildSetStoryReactionStatement,
 } from "@/lib/db/story-sql";
 import { parseUserId } from "@/lib/db/profile-sql";
+import {
+  canReactToStory,
+  canReplyToStory,
+  getPrivacyContext,
+} from "@/lib/privacy/service";
 import { DatabaseError, ValidationError } from "@/lib/errors";
 import { logServerError } from "@/lib/logging";
 
@@ -282,8 +288,19 @@ export async function createStoryRecord(input: {
   byteSize: number;
   caption: string;
   textOverlay: string | null;
+  audience?: string | null;
+  userIds?: string[] | null;
+  excludedUserIds?: string[] | null;
 }): Promise<{ id: string; expiresAt: string }> {
   validateIds(input.id, input.userId);
+
+  const audience = ["followers", "close_friends", "custom"].includes(input.audience ?? "")
+    ? input.audience!
+    : "followers";
+  const cleanIds = (values: string[] | null | undefined): string[] =>
+    [...new Set((values ?? []).filter((id) => parseUserId(id) && id !== input.userId))].slice(0, 200);
+  const included = audience === "custom" ? cleanIds(input.userIds) : [];
+  const excluded = cleanIds(input.excludedUserIds).filter((id) => !included.includes(id));
 
   const values: NewStory = {
     id: input.id,
@@ -294,6 +311,7 @@ export async function createStoryRecord(input: {
     byteSize: input.byteSize,
     caption: input.caption,
     textOverlay: input.textOverlay,
+    audience,
     expiresAt: nextStoryExpiration(),
   };
 
@@ -304,12 +322,38 @@ export async function createStoryRecord(input: {
       .returning({ id: stories.id, expiresAt: stories.expiresAt });
     const row = rows[0];
     if (!row) throw new DatabaseError();
+
+    const entries = [
+      ...included.map((userId) => ({ storyId: row.id, userId, kind: "include" })),
+      ...excluded.map((userId) => ({ storyId: row.id, userId, kind: "exclude" })),
+    ];
+    if (entries.length > 0) {
+      await getDb().insert(storyAudienceEntries).values(entries).onConflictDoNothing();
+    }
     return { id: row.id, expiresAt: row.expiresAt.toISOString() };
   } catch (error) {
     if (error instanceof DatabaseError || error instanceof ValidationError) throw error;
     logServerError("db.createStoryRecord", error, { userId: input.userId });
     throw new DatabaseError();
   }
+}
+
+/** Owner of a story the viewer may actually open, including audience rules. */
+async function getVisibleStoryOwner(
+  storyId: string,
+  viewerId: string,
+): Promise<string | null> {
+  const rows = await getDb()
+    .select({ ownerId: stories.userId })
+    .from(stories)
+    .where(
+      and(
+        eq(stories.id, storyId),
+        buildStoryVisibilityCondition(viewerId, new Date().toISOString()),
+      ),
+    )
+    .limit(1);
+  return rows[0]?.ownerId ?? null;
 }
 
 /** Active, authorized story detail for views, reactions, and deletion UI. */
@@ -355,6 +399,10 @@ export async function recordStoryView(
   viewerId: string,
 ): Promise<boolean> {
   validateIds(storyId, viewerId);
+  const ownerId = await getVisibleStoryOwner(storyId, viewerId);
+  if (!ownerId || ownerId === viewerId) return false;
+  const context = await getPrivacyContext(viewerId, ownerId);
+  if (!canReplyToStory(context)) return false;
 
   try {
     const result = await getDb().execute(
@@ -419,6 +467,10 @@ export async function setStoryReaction(
   emoji: StoryReactionEmoji | null,
 ): Promise<{ emoji: StoryReactionEmoji | null }> {
   validateIds(storyId, userId);
+  const ownerId = await getVisibleStoryOwner(storyId, userId);
+  if (!ownerId) throw new ValidationError("That story is no longer available.");
+  const context = await getPrivacyContext(userId, ownerId);
+  if (!canReactToStory(context)) throw new ValidationError("You cannot react to this story.");
   const nowIso = new Date().toISOString();
 
   try {

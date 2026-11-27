@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, gt, inArray } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import {
   conversationParticipants,
@@ -7,8 +7,11 @@ import {
   posts,
   profiles,
   stories,
+  userRelationships,
   users,
 } from "@/lib/db/schema";
+import { buildPostVisibilityCondition } from "@/lib/db/post-query";
+import { buildStoryVisibilityCondition } from "@/lib/db/story-query";
 import { parseUserId } from "@/lib/db/profile-sql";
 import {
   buildFollowNotificationStatement,
@@ -91,14 +94,38 @@ export async function getPostOwnerId(postId: string): Promise<string | null> {
   }
 }
 
+/** Owner lookup for engagement checks; invisible posts yield no owner. */
+export async function getVisiblePostOwnerId(
+  postId: string,
+  viewerId: string | null,
+): Promise<string | null> {
+  if (!parseUserId(postId)) return null;
+  try {
+    const rows = await getDb()
+      .select({ ownerId: posts.userId })
+      .from(posts)
+      .where(and(eq(posts.id, postId), buildPostVisibilityCondition(viewerId)))
+      .limit(1);
+    return rows[0]?.ownerId ?? null;
+  } catch (error) {
+    logServerError("db.getVisiblePostOwnerId", error, { postId });
+    return null;
+  }
+}
+
 /** Only active stories can produce a valid reaction notification. */
-export async function getActiveStoryOwnerId(storyId: string): Promise<string | null> {
+export async function getActiveStoryOwnerId(
+  storyId: string,
+  viewerId?: string | null,
+): Promise<string | null> {
   if (!parseUserId(storyId)) return null;
   try {
+    const conditions = [eq(stories.id, storyId), gt(stories.expiresAt, new Date())];
+    if (viewerId) conditions.push(buildStoryVisibilityCondition(viewerId, new Date().toISOString()));
     const rows = await getDb()
       .select({ ownerId: stories.userId })
       .from(stories)
-      .where(and(eq(stories.id, storyId), gt(stories.expiresAt, new Date())))
+      .where(and(...conditions))
       .limit(1);
     return rows[0]?.ownerId ?? null;
   } catch (error) {
@@ -183,7 +210,7 @@ async function resolveTargets(
     const rows = await getDb()
       .select({ id: posts.id })
       .from(posts)
-      .where(inArray(posts.id, postIds));
+      .where(and(inArray(posts.id, postIds), buildPostVisibilityCondition(viewerId)));
     for (const row of rows) targets.posts.add(row.id);
   }
 
@@ -191,7 +218,12 @@ async function resolveTargets(
     const rows = await getDb()
       .select({ id: stories.id, ownerId: stories.userId })
       .from(stories)
-      .where(and(inArray(stories.id, storyIds), gt(stories.expiresAt, new Date())));
+      .where(
+        and(
+          inArray(stories.id, storyIds),
+          buildStoryVisibilityCondition(viewerId, new Date().toISOString()),
+        ),
+      );
     for (const row of rows) targets.stories.set(row.id, row.ownerId);
   }
 
@@ -234,7 +266,23 @@ export async function listNotifications(
       .from(notifications)
       .innerJoin(users, eq(users.id, notifications.actorId))
       .leftJoin(profiles, eq(profiles.userId, users.id))
-      .where(buildNotificationPageCondition(viewerId, cursor))
+      .where(
+        and(
+          buildNotificationPageCondition(viewerId, cursor),
+          sql`exists (
+            select 1 from ${users} actor
+            where actor.id = ${notifications.actorId} and actor.account_status <> 'banned'
+          )`,
+          sql`not exists (
+            select 1 from ${userRelationships} rel
+            where rel.kind = 'block'
+              and (
+                (rel.actor_id = ${viewerId} and rel.target_id = ${notifications.actorId})
+                or (rel.actor_id = ${notifications.actorId} and rel.target_id = ${viewerId})
+              )
+          )`,
+        ),
+      )
       .orderBy(desc(notifications.createdAt), desc(notifications.id))
       .limit(options.limit + 1);
 

@@ -57,6 +57,13 @@
       "when": 1795662317815,
       "tag": "0007_short_korg",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1795705260251,
+      "tag": "0008_chubby_the_call",
+      "breakpoints": true
     }
   ]
 }

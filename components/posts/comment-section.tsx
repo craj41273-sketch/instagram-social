@@ -2,6 +2,7 @@ import Link from "next/link";
 import { MessageCircle } from "lucide-react";
 import { DeleteCommentButton, CommentComposer } from "@/components/posts/comment-controls";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
+import { ReportLink } from "@/components/reporting/report-link";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { PublicComment } from "@/lib/db/engagement";
@@ -79,7 +80,16 @@ export function CommentSection({
                     <div className="mt-1">
                       <DeleteCommentButton commentId={comment.id} />
                     </div>
-                  ) : null}
+                  ) : (
+                    <div className="-ml-2 mt-1">
+                      <ReportLink
+                        targetType="comment"
+                        targetId={comment.id}
+                        isAuthenticated={viewerUserId !== null}
+                        loginHref={loginHref}
+                      />
+                    </div>
+                  )}
                 </div>
               </li>
             ))}

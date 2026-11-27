@@ -1,7 +1,21 @@
 import "server-only";
-import { and, desc, eq, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql, type SQL } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { comments, postLikes, posts, profiles, users } from "@/lib/db/schema";
+import {
+  comments,
+  postLikes,
+  posts,
+  profiles,
+  userRelationships,
+  users,
+} from "@/lib/db/schema";
+import { buildPostVisibilityCondition } from "@/lib/db/post-query";
+import {
+  canComment,
+  filterHiddenWords,
+  getPrivacyContext,
+} from "@/lib/privacy/service";
+import { getVisiblePostOwnerId } from "@/lib/db/notifications";
 import { parseUserId } from "@/lib/db/profile-sql";
 import { DatabaseError, ValidationError } from "@/lib/errors";
 import { logServerError } from "@/lib/logging";
@@ -40,13 +54,39 @@ function commentPageCondition(cursor: PageCursor | null): SQL | undefined {
   )`;
 }
 
-async function postExists(postId: string): Promise<boolean> {
+async function postExists(postId: string, viewerId: string | null): Promise<boolean> {
   const rows = await getDb()
     .select({ id: posts.id })
     .from(posts)
-    .where(eq(posts.id, postId))
+    .where(and(eq(posts.id, postId), buildPostVisibilityCondition(viewerId)))
     .limit(1);
   return rows.length > 0;
+}
+
+/**
+ * Viewer-side comment filtering: stored content is never edited. Blocked and
+ * restricted pairs are hidden both ways, while hidden words apply to this viewer.
+ */
+export async function filterCommentsForViewer<T extends { userId: string; content: string }>(
+  items: T[],
+  viewerId: string | null,
+): Promise<T[]> {
+  if (!viewerId || items.length === 0) return items;
+  const authorIds = [...new Set(items.map((item) => item.userId))];
+  const rows = await getDb()
+    .select({ actorId: userRelationships.actorId, targetId: userRelationships.targetId })
+    .from(userRelationships)
+    .where(
+      and(
+        inArray(userRelationships.kind, ["block", "restrict"]),
+        or(
+          and(eq(userRelationships.actorId, viewerId), inArray(userRelationships.targetId, authorIds)),
+          and(inArray(userRelationships.actorId, authorIds), eq(userRelationships.targetId, viewerId)),
+        ),
+      ),
+    );
+  const hiddenAuthors = new Set(rows.map((row) => row.actorId === viewerId ? row.targetId : row.actorId));
+  return filterHiddenWords(viewerId, items.filter((item) => !hiddenAuthors.has(item.userId)));
 }
 
 async function readLikeState(postId: string, userId: string): Promise<LikeState> {
@@ -73,7 +113,7 @@ export async function likePost(
   }
 
   try {
-    if (!(await postExists(postId))) return null;
+    if (!(await postExists(postId, userId))) return null;
     await getDb()
       .insert(postLikes)
       .values({ postId, userId })
@@ -95,7 +135,7 @@ export async function unlikePost(
   }
 
   try {
-    if (!(await postExists(postId))) return null;
+    if (!(await postExists(postId, userId))) return null;
     await getDb()
       .delete(postLikes)
       .where(and(eq(postLikes.postId, postId), eq(postLikes.userId, userId)));
@@ -192,7 +232,12 @@ export async function createComment(
   if (!parsed.success) return null;
 
   try {
-    if (!(await postExists(postId))) return null;
+    if (!(await postExists(postId, userId))) return null;
+    const ownerId = await getVisiblePostOwnerId(postId, userId);
+    if (!ownerId) return null;
+    const context = await getPrivacyContext(userId, ownerId);
+    if (!canComment(context)) return null;
+
     const inserted = await getDb()
       .insert(comments)
       .values({ postId, userId, content: parsed.data })
@@ -233,6 +278,7 @@ export async function deleteOwnComment(
 export async function listComments(
   postId: string,
   options: { limit?: number; cursor?: string | null } = {},
+  viewerUserId: string | null = null,
 ): Promise<CommentPage> {
   if (!parseUserId(postId)) return { items: [], nextCursor: null };
 
@@ -264,8 +310,8 @@ export async function listComments(
 
     const hasMore = rows.length > limit;
     const pageRows = rows.slice(0, limit);
-    return {
-      items: pageRows.map((row) => ({
+    const items = await filterCommentsForViewer(
+      pageRows.map((row) => ({
         id: row.id,
         postId: row.postId,
         userId: row.userId,
@@ -275,6 +321,10 @@ export async function listComments(
         content: row.content,
         createdAt: row.createdAt.toISOString(),
       })),
+      viewerUserId,
+    );
+    return {
+      items,
       nextCursor:
         hasMore && pageRows.at(-1)
           ? encodePageCursor({ createdAt: pageRows.at(-1)!.cursor, id: pageRows.at(-1)!.id })

@@ -2,7 +2,10 @@ import "server-only";
 import { and, asc, eq, ilike, ne } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/lib/db";
-import { buildSuggestedUsersCondition } from "@/lib/db/discovery-query";
+import {
+  buildDiscoverableUserCondition,
+  buildSuggestedUsersCondition,
+} from "@/lib/db/discovery-query";
 import { profiles, users } from "@/lib/db/schema";
 import { DatabaseError } from "@/lib/errors";
 import { logServerError } from "@/lib/logging";
@@ -102,7 +105,7 @@ export async function getSuggestedUsers(
       })
       .from(users)
       .leftJoin(profiles, eq(profiles.userId, users.id))
-      .where(buildSuggestedUsersCondition(parsed.data))
+      .where(and(buildSuggestedUsersCondition(parsed.data), buildDiscoverableUserCondition(parsed.data)))
       .orderBy(asc(users.username))
       .limit(safeLimit);
 
@@ -130,6 +133,7 @@ export async function searchUsersByUsername(
   limit: number,
   offset: number,
   excludeUserId?: string | null,
+  viewerUserId?: string | null,
 ): Promise<UserSearchPage> {
   const parsed = userSearchQuerySchema.safeParse({
     q: query,
@@ -154,6 +158,7 @@ export async function searchUsersByUsername(
         and(
           ilike(users.username, `${escapeLike(q)}%`),
           excludeUserId ? ne(users.id, excludeUserId) : undefined,
+          buildDiscoverableUserCondition(viewerUserId ?? null),
         ),
       )
       .orderBy(asc(users.username), asc(users.id))

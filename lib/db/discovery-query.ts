@@ -1,5 +1,12 @@
 import { sql, type SQL } from "drizzle-orm";
-import { follows, posts, profiles, users } from "@/lib/db/schema";
+import {
+  follows,
+  posts,
+  profilePrivacySettings,
+  profiles,
+  userRelationships,
+  users,
+} from "@/lib/db/schema";
 import { containsPattern } from "@/lib/discovery/search";
 import { TRENDING_WINDOW_DAYS } from "@/lib/discovery/ranking";
 
@@ -27,6 +34,25 @@ export function buildTrendingCondition(): SQL {
 
 export function buildRecentTagCondition(): SQL {
   return sql`${posts.createdAt} >= now() - (${TAG_WINDOW_DAYS} * interval '1 day')`;
+}
+
+/** Discovery excludes undiscoverable, banned, and block-related accounts. */
+export function buildDiscoverableUserCondition(viewerUserId: string | null): SQL {
+  return sql`
+    ${users.accountStatus} <> 'banned'
+    and coalesce((
+      select settings.discoverable from ${profilePrivacySettings} settings
+      where settings.user_id = ${users.id}
+    ), true) = true
+    and not exists (
+      select 1 from ${userRelationships} rel
+      where rel.kind = 'block'
+        and (
+          (rel.actor_id = ${viewerUserId} and rel.target_id = ${users.id})
+          or (rel.actor_id = ${users.id} and rel.target_id = ${viewerUserId})
+        )
+    )
+  `;
 }
 
 /** Real suggestions exclude self and any existing follow edge. */

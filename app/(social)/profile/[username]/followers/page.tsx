@@ -27,7 +27,7 @@ export default async function FollowersPage({
     return <SocialListError username={result.username} direction="followers" />;
   }
 
-  const { profile, page, viewerUsername, limit } = result.data;
+  const { profile, page, viewerUsername, limit, canViewList } = result.data;
   const nextHref = page.nextCursor
     ? `/profile/${profile.username}/followers?limit=${limit}&cursor=${encodeURIComponent(page.nextCursor)}`
     : null;
@@ -38,7 +38,8 @@ export default async function FollowersPage({
       direction="followers"
       page={page}
       viewerUsername={viewerUsername}
-      nextHref={nextHref}
+      nextHref={canViewList ? nextHref : null}
+      hidden={!canViewList}
     />
   );
 }

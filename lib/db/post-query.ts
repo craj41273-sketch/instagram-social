@@ -1,5 +1,11 @@
 import { and, desc, eq, lt, or, sql, type SQL } from "drizzle-orm";
-import { posts } from "@/lib/db/schema";
+import {
+  follows,
+  posts,
+  profiles,
+  userRelationships,
+  users,
+} from "@/lib/db/schema";
 import type { PageCursor } from "@/lib/pagination";
 
 /** Keyset helpers shared by the profile grid and the post feed. */
@@ -47,6 +53,40 @@ export const postCursorTimestamp = sql<string>`to_char(
 
 export function buildPostOwnerCondition(userId: string): SQL {
   return eq(posts.userId, userId);
+}
+
+/**
+ * Pure visibility predicate shared by every post read. Own posts are always
+ * visible; other posts require a non-banned author, no block edge in either
+ * direction, and either a public account or an accepted follow for private ones.
+ * `viewerUserId` is session-derived; null represents an anonymous visitor.
+ */
+export function buildPostVisibilityCondition(viewerUserId: string | null): SQL {
+  return and(
+    sql`exists (
+      select 1 from ${users} author
+      where author.id = ${posts.userId} and author.account_status <> 'banned'
+    )`,
+    sql`not exists (
+      select 1 from ${userRelationships} rel
+      where rel.kind = 'block'
+        and (
+          (rel.actor_id = ${viewerUserId} and rel.target_id = ${posts.userId})
+          or (rel.actor_id = ${posts.userId} and rel.target_id = ${viewerUserId})
+        )
+    )`,
+    sql`(
+      ${posts.userId} = ${viewerUserId}
+      or coalesce((
+        select profile.is_private from ${profiles} profile
+        where profile.user_id = ${posts.userId}
+      ), false) = false
+      or exists (
+        select 1 from ${follows} f
+        where f.follower_id = ${viewerUserId} and f.following_id = ${posts.userId}
+      )
+    )`,
+  )!;
 }
 
 /**

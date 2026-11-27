@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 interface FollowButtonProps {
   targetUsername: string;
   initialFollowing: boolean;
+  initialRequested?: boolean;
   isAuthenticated: boolean;
   isSelf: boolean;
   loginHref: string;
@@ -60,12 +61,14 @@ function PendingAwareButton({
 export function FollowButton({
   targetUsername,
   initialFollowing,
+  initialRequested = false,
   isAuthenticated,
   isSelf,
   loginHref,
   compact = false,
 }: FollowButtonProps) {
   const [serverFollowing, setServerFollowing] = useState(initialFollowing);
+  const [requested, setRequested] = useState(initialRequested);
   const [optimisticFollowing, setOptimisticFollowing] = useOptimistic(
     serverFollowing,
     (_current: boolean, next: boolean) => next,
@@ -86,10 +89,11 @@ export function FollowButton({
     );
   }
 
-  function submit(intent: "follow" | "unfollow") {
+  function submit(intent: "follow" | "unfollow" | "cancel") {
     const nextFollowing = intent === "follow";
     setFeedback(null);
     setConfirming(false);
+    setRequested(false);
 
     startTransition(async () => {
       setOptimisticFollowing(nextFollowing);
@@ -106,6 +110,9 @@ export function FollowButton({
 
         if (typeof result.following === "boolean") {
           setServerFollowing(result.following);
+        }
+        if (typeof result.requested === "boolean") {
+          setRequested(result.requested);
         }
         if (result.message) {
           setFeedback({
@@ -161,6 +168,21 @@ export function FollowButton({
           <Check aria-hidden="true" />
           Following
         </PremiumButton>
+      ) : requested ? (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            submit("cancel");
+          }}
+        >
+          <PendingAwareButton
+            label="Requested"
+            loadingLabel="Cancelling…"
+            premiumVariant="soft"
+            compact={compact}
+            pending={isPending}
+          />
+        </form>
       ) : (
         <form
           onSubmit={(event) => {

@@ -4,17 +4,26 @@ import { notFound } from "next/navigation";
 import { ErrorState } from "@/components/shared/error-state";
 import { PageContainer } from "@/components/layout/page-container";
 import { PremiumButton } from "@/components/ui/premium-button";
+import { HypeButton } from "@/components/profile/hype-button";
+import { ProfessionalProfile } from "@/components/profile/professional-profile";
 import { ProfileHeader } from "@/components/profile/profile-header";
 import { ProfilePostsGrid } from "@/components/profile/profile-posts-grid";
+import { ReputationBars } from "@/components/profile/reputation-bars";
 import { ProfileTabs } from "@/components/profile/profile-tabs";
 import { UserList } from "@/components/profile/user-list";
 import { getCurrentProfile } from "@/lib/auth/dal";
 import { getFollowCounts, isFollowing, listFollowers, listFollowing } from "@/lib/db/follows";
 import { getPostCountByUserId, listProfilePosts } from "@/lib/db/posts";
-import { getPublicProfileByUsername } from "@/lib/db/profiles";
+import { getPublicProfileByUsername, isPrivateProfile } from "@/lib/db/profiles";
 import { getSuggestedUsers } from "@/lib/db/users";
+import {
+  canViewPosts,
+  getPrivacyContext,
+} from "@/lib/privacy/service";
+import { getFollowRequestState } from "@/lib/privacy/relationships";
 import { logServerError } from "@/lib/logging";
 import { LIST_PAGE_SIZE } from "@/lib/pagination";
+import { getTrustStats } from "@/lib/trust/service";
 import { usernameSchema } from "@/lib/validations/auth";
 
 interface ProfilePageProps {
@@ -60,31 +69,55 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
   const viewerId = viewer?.user.id ?? null;
   const viewerUsername = viewer?.user.username ?? null;
 
+  let canView = false;
+  let requested = false;
+  try {
+    const context = await getPrivacyContext(viewerId, profile.userId);
+    const privateProfile = await isPrivateProfile(profile.userId);
+    canView = canViewPosts({
+      ...context,
+      settings: { ...context.settings, isPrivate: privateProfile },
+    });
+    requested = (await getFollowRequestState(viewerId, profile.userId)) === "pending";
+  } catch (error) {
+    logServerError("profile.page.privacy", error, { userId: profile.userId });
+  }
+
   let counts = { followers: 0, following: 0 };
   let following = false;
-  try {
-    counts = await getFollowCounts(profile.userId);
-    if (viewerId && !isOwner) {
-      following = await isFollowing(viewerId, profile.userId);
+  if (canView) {
+    try {
+      counts = await getFollowCounts(profile.userId);
+      if (viewerId && !isOwner) {
+        following = await isFollowing(viewerId, profile.userId);
+      }
+    } catch (error) {
+      logServerError("profile.page.social", error, { userId: profile.userId });
+      return <ProfileLoadError username={profile.username} />;
     }
-  } catch (error) {
-    logServerError("profile.page.social", error, { userId: profile.userId });
-    return <ProfileLoadError username={profile.username} />;
   }
 
   let postCount = 0;
   let postsError = false;
-  try {
-    postCount = await getPostCountByUserId(profile.userId);
-  } catch (error) {
-    logServerError("profile.page.postCount", error, { userId: profile.userId });
-    postsError = true;
+  if (canView) {
+    try {
+      postCount = await getPostCountByUserId(profile.userId);
+    } catch (error) {
+      logServerError("profile.page.postCount", error, { userId: profile.userId });
+      postsError = true;
+    }
   }
 
-  const [followersPageResult, followingPageResult] = await Promise.allSettled([
-    listFollowers(profile.userId, { viewerUserId: viewerId, limit: LIST_PAGE_SIZE }),
-    listFollowing(profile.userId, { viewerUserId: viewerId, limit: LIST_PAGE_SIZE }),
-  ]);
+  const emptyList = { items: [], nextCursor: null };
+  const [followersPageResult, followingPageResult] = canView
+    ? await Promise.allSettled([
+        listFollowers(profile.userId, { viewerUserId: viewerId, limit: LIST_PAGE_SIZE }),
+        listFollowing(profile.userId, { viewerUserId: viewerId, limit: LIST_PAGE_SIZE }),
+      ])
+    : [
+        { status: "fulfilled" as const, value: emptyList },
+        { status: "fulfilled" as const, value: emptyList },
+      ];
 
   if (followersPageResult.status === "rejected") {
     logServerError("profile.page.followers", followersPageResult.reason, {
@@ -105,9 +138,12 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
   }
 
   let posts = null;
-  if (!postsError) {
+  if (canView && !postsError) {
     try {
-      posts = await listProfilePosts(profile.userId, { limit: LIST_PAGE_SIZE });
+      posts = await listProfilePosts(profile.userId, {
+        limit: LIST_PAGE_SIZE,
+        viewerUserId: viewerId,
+      });
     } catch (error) {
       logServerError("profile.page.posts", error, { userId: profile.userId });
       postsError = true;
@@ -123,6 +159,15 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
     }
   }
 
+  let viewerHasHype = false;
+  if (viewerId && !isOwner) {
+    try {
+      viewerHasHype = (await getTrustStats(profile.userId, viewerId)).viewerHasHype;
+    } catch (error) {
+      logServerError("profile.page.viewerHype", error, { userId: viewerId });
+    }
+  }
+
   return (
     <PageContainer className="space-y-6">
       <ProfileHeader
@@ -131,12 +176,28 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
         followers={counts.followers}
         following={counts.following}
         isFollowing={following}
+        initialRequested={requested}
         isOwner={isOwner}
         viewerUsername={viewerUsername}
         initialFollowers={followersPageResult.value}
         initialFollowing={followingPageResult.value}
         listLimit={LIST_PAGE_SIZE}
       />
+
+      {canView ? (
+        <ProfessionalProfile targetId={profile.userId} viewerId={viewerId} />
+      ) : null}
+
+      <ReputationBars targetId={profile.userId} viewerId={viewerId} />
+
+      {viewerId && !isOwner ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <HypeButton targetUsername={profile.username} initialActive={viewerHasHype} />
+          <p className="text-xs text-muted-foreground">
+            Trust hypes are reversible community signals, not endorsements.
+          </p>
+        </div>
+      ) : null}
 
       <ProfileTabs
         posts={

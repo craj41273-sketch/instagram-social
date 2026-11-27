@@ -1,6 +1,6 @@
 # Luma
 
-Premium, dark-first photo-sharing experience built on Next.js. **Blocks 1–10 are complete locally.** Profiles include validated avatar/cover uploads, real social graph state, and a DB-backed post grid. Posts add multi-image creation, media viewing, owner-only editing/deletion, and a paginated feed. Block 7 adds a self/following social feed, database-backed likes, comments, and a post detail conversation. Block 8 adds a real-photo Explore grid, debounced global search, discover-people suggestions, and explainable trending. Block 9 adds 24-hour photo stories with a feed tray, full-screen viewer, unique view tracking, reactions, and owner-only deletion. Block 10 adds one-to-one messages, a notification center, unread badges, and optional realtime refresh signals. Remote Neon/Supabase verification still requires real credentials.
+Premium, dark-first photo-sharing experience built on Next.js. **Blocks 1–10 and Block 11A are complete locally.** Profiles include validated avatar/cover uploads, real social graph state, and a DB-backed post grid. Posts add multi-image creation, media viewing, owner-only editing/deletion, and a paginated feed. Block 7 adds a self/following social feed, database-backed likes, comments, and a post detail conversation. Block 8 adds a real-photo Explore grid, debounced global search, discover-people suggestions, and explainable trending. Block 9 adds 24-hour photo stories with a feed tray, full-screen viewer, unique view tracking, reactions, and owner-only deletion. Block 10 adds one-to-one messages, a notification center, unread badges, and optional realtime refresh signals. Block 11A adds privacy controls, professional identities, community trust, authenticated reporting with bounded chat evidence, admin risk/moderation/appeals, and real safety metrics. Remote Neon/Supabase verification still requires real credentials.
 
 ## Stack
 
@@ -67,6 +67,12 @@ Open <http://localhost:3000>. Every route — the landing page, design system, a
 | `/stories/[userId]` | Full-screen story viewer with progression, pause/resume, keyboard/tap navigation, views, reactions, and owner deletion |
 | `/stories/viewers/[storyId]` | Owner-only list of unique story viewers |
 | `/api/stories` | Authenticated, same-origin multipart story upload endpoint |
+| `/messages`, `/messages/[conversationId]` | Participant-only one-to-one inbox and chat with cursor paging |
+| `/notifications`, `/api/unread` | Recipient-only notices and DB-derived navigation badges |
+| `/settings/**` | Privacy, professional category, links, projects, and trust controls |
+| `/report`, `/report/[reportId]` | Authenticated reporting with consent disclosure and content-free status |
+| `/appeals` | User appeal form and report/appeal history |
+| `/admin`, `/admin/reports/**`, `/admin/users/**`, `/admin/appeals`, `/admin/moderation`, `/admin/audit-logs` | Staff-only queues, risk, moderation, appeals, and audit trail with real metrics |
 | `/privacy`, `/terms`, `/contact` | Honest placeholder pages so footer links resolve |
 
 > **Credential status:** all auth, profile, and post routes are implemented locally; real signup, data queries, uploads, follow/post mutations, and email delivery require the values in `.env.local`. No remote migration was applied from this environment. See [`docs/BACKEND.md`](docs/BACKEND.md) and [`docs/PROFILES.md`](docs/PROFILES.md).
@@ -187,6 +193,19 @@ public/               Static assets
 - **Tests:** structural/unit tests cover schema constraints, validation, SQL parameterization, idempotency, participant checks, soft deletion, read/unread, notification dedupe/guards, target validation, privacy, and additive migration. Real Neon/Supabase integration tests are opt-in with `LUMA_DB_INTEGRATION=1` and `DATABASE_URL`; they are skipped locally. No live Broadcast or browser screenshots were verified without credentials/automation.
 - **Not included:** group chat, attachments, voice/video, E2E encryption, disappearing messages, typing indicators, presence, AI/chatbots, and scheduled cleanup. Responsive layouts were checked structurally at Tailwind breakpoints, not by screenshots.
 
+## Block 11A behavior
+
+- **Privacy:** `/settings/privacy` controls private account state, story/message/comment/mention audiences, read receipts, activity status, discoverability, hidden words, and block/restrict/mute/close-friend relationships. Backend reads and writes recheck visibility; private accounts expose a profile shell but hide posts/media from non-followers. Missing setting rows use neutral defaults and are not written on read.
+- **Professional identity:** category and role fields are self-described only. `/settings/professional`, `/settings/links`, and `/settings/projects` accept bounded category-aware details, absolute HTTP(S) links, and portfolio projects; links/projects have visibility controls and ordering. No verification badge, privilege, search boost, or admin authority is granted by any professional field.
+- **Trust:** one authenticated hype per giver/target pair can be toggled; withdrawal keeps a durable row to prevent replay. Trust is recomputed from real eligible accounts as `MIN(100, (Valid Trust Hypes / (Eligible Total Users × 0.20)) × 100)` with no admin writer, no stored percentage, and no heart/star symbols. Unassessed means zero valid hypes.
+- **Risk:** admin-only 0–100 score plus a distinct `Unassessed` state. Reasons, evidence references, actor, history, and audit trail are required; moderators cannot set or remove risk, and report volume never changes it.
+- **Reporting:** authenticated reports cover users, profiles/posts, comments, stories, messages, and conversations. Zod validation, duplicate detection, per-user rate limiting, and anonymous target-facing notices are enforced. Priority is derived from category alone; volume never triggers punishment. Decisions require resolution notes.
+- **Chat evidence:** message/conversation reports capture a bounded both-sided snapshot of the selected message plus up to seven messages on each side (20 total), with conversation/participants/sender IDs/timestamps/content/media refs at report time, category, explanation, and capture time. The reporter sees a consent disclosure; authorized access is audited, and no chat text is copied into notifications or audit logs.
+- **Admin:** `/admin/**` is gated by server session role on every page/action. Queues, filters, evidence viewer, risk forms, moderation actions, appeals, and audit logs use real rows only. High-impact forms require explicit confirmation; moderation never auto-deletes user data and no automated volume-based punishment exists.
+- **Screenshots:** private/professional/report surfaces discourage casual copy, context menus, and dragging, but browsers cannot prevent OS screenshots or screen recording. This is not a confidentiality boundary.
+- **Migration:** `drizzle/0008_chubby_the_call.sql` is additive and reviewed but **not applied** from this environment. It widens one notification CHECK to include safety notices and adds columns/tables/constraints without deleting data; apply `0004`–`0008` in order when Neon credentials are available.
+- **Tests:** 76 passing structural tests cover Block 11A schema, additive migration, the exact trust formula, validation, and separation of trust/risk/reporting inputs. Real Neon/Supabase flows and browser screenshots at 320/375/430/768/1024/1440 px were not run without credentials or browser automation.
+
 ## Current status
 
 - [x] Next.js App Router + TypeScript strict mode
@@ -219,4 +238,9 @@ public/               Static assets
 - [x] One-to-one messages, inbox, conversation paging, read state, and unread badges (Block 10)
 - [x] Real notification center, dedupe, owner-only reads, and validated navigation (Block 10)
 - [x] Optional Broadcast refresh signals with polling fallback and structural tests (Block 10)
+- [x] Privacy settings, requests, relationship controls, and backend visibility enforcement (Block 11A)
+- [x] Self-described professional categories, safe external links, and portfolio projects (Block 11A)
+- [x] Authenticated hypes, exact community trust formula, and independent admin-only risk state (Block 11A)
+- [x] Reports, bounded chat evidence snapshots, appeals, and audited authorized access (Block 11A)
+- [x] Staff-only admin dashboard, moderation, audit logs, and real metrics (Block 11A)
 - [ ] Save state and recommendations (later blocks)

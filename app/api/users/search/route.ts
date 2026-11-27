@@ -52,6 +52,7 @@ export async function GET(request: Request): Promise<Response> {
       parsed.data.limit,
       parsed.data.offset,
       viewerId,
+      viewerId,
     );
 
     return Response.json(page, { headers: { "Cache-Control": "no-store" } });

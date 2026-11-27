@@ -4,6 +4,7 @@ import { ImageContainer } from "@/components/shared/image-container";
 import { PremiumButton } from "@/components/ui/premium-button";
 import { FollowButton } from "@/components/profile/follow-button";
 import { MessageButton } from "@/components/messaging/message-button";
+import { ReportLink } from "@/components/reporting/report-link";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { ProfileStats } from "@/components/profile/profile-stats";
 import type { SocialUserPage } from "@/lib/db/follows";
@@ -16,6 +17,7 @@ interface ProfileHeaderProps {
   followers: number;
   following: number;
   isFollowing: boolean;
+  initialRequested?: boolean;
   isOwner: boolean;
   viewerUsername: string | null;
   initialFollowers: SocialUserPage;
@@ -30,6 +32,7 @@ export function ProfileHeader({
   followers,
   following,
   isFollowing,
+  initialRequested = false,
   isOwner,
   viewerUsername,
   initialFollowers,
@@ -73,6 +76,7 @@ export function ProfileHeader({
                 <FollowButton
                   targetUsername={profile.username}
                   initialFollowing={isFollowing}
+                  initialRequested={initialRequested}
                   isAuthenticated={viewerUsername !== null}
                   isSelf={viewerUsername === profile.username}
                   loginHref={loginHref}
@@ -81,6 +85,12 @@ export function ProfileHeader({
                   username={profile.username}
                   isAuthenticated={viewerUsername !== null}
                   isSelf={viewerUsername === profile.username}
+                  loginHref={loginHref}
+                />
+                <ReportLink
+                  targetType="user"
+                  targetId={profile.userId}
+                  isAuthenticated={viewerUsername !== null}
                   loginHref={loginHref}
                 />
               </>

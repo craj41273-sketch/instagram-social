@@ -87,6 +87,7 @@ Tailwind defaults (`sm`, `md`, `lg`, `xl`, `2xl`) plus custom `3xl` (`96rem`) fo
 | Spinner | `components/ui/spinner.tsx` | Accessible `role="status"` |
 | Toast | `components/ui/toast.tsx` | Radix provider + `useToast()` with tones |
 | ImageContainer | `components/shared/image-container.tsx` | Ratios (`square`, `portrait`, `landscape`, `wide`, `fill`), `fit` (`cover`/`contain`), next/image, loading skeleton, gradient fallback, `unoptimized` escape hatch |
+| SensitiveSurface | `components/shared/sensitive-surface.tsx` | Blocks context menu/drag and disables selection for report evidence/private surfaces; cannot prevent OS screenshots |
 | UserPreview | `components/shared/user-preview.tsx` | Avatar, name, handle, verified, presence |
 | EmptyState | `components/shared/empty-state.tsx` | Icon, title, description, action |
 | ErrorState | `components/shared/error-state.tsx` | `role="alert"`, title, description, action |

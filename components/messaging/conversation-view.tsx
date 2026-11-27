@@ -4,7 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, SendHorizontal } from "lucide-react";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
+import { ReportLink } from "@/components/reporting/report-link";
 import { EmptyState } from "@/components/shared/empty-state";
+import { SensitiveSurface } from "@/components/shared/sensitive-surface";
 import { ErrorState } from "@/components/shared/error-state";
 import { PremiumButton } from "@/components/ui/premium-button";
 import { Spinner } from "@/components/ui/spinner";
@@ -51,6 +53,7 @@ export function ConversationView({
   initialPage,
 }: ConversationViewProps) {
   const { toast } = useToast();
+  const loginHref = `/login?next=${encodeURIComponent(`/messages/${conversationId}`)}`;
   const [items, setItems] = useState(initialPage.items);
   const [cursor, setCursor] = useState(initialPage.nextCursor);
   const [draft, setDraft] = useState("");
@@ -154,70 +157,85 @@ export function ConversationView({
           </Link>
           <p className="truncate text-xs text-muted-foreground">@{header.username}</p>
         </div>
+        <ReportLink
+          targetType="conversation"
+          targetId={conversationId}
+          isAuthenticated
+          loginHref={loginHref}
+        />
       </div>
 
       {error ? (
         <ErrorState title="Update failed" description={error} />
       ) : null}
 
-      <section
-        aria-label="Conversation messages"
-        className="max-h-[60vh] min-h-64 space-y-3 overflow-y-auto rounded-2xl border border-border/60 bg-surface/40 p-4"
-      >
-        {cursor ? (
-          <div className="flex justify-center">
-            <PremiumButton
-              premiumVariant="outline"
-              size="sm"
-              type="button"
-              disabled={loadingMore}
-              onClick={() => void loadMore()}
-            >
-              {loadingMore ? <Spinner className="size-4" /> : null}
-              {loadingMore ? "Loading…" : "Load older messages"}
-            </PremiumButton>
-          </div>
-        ) : null}
+      <SensitiveSurface className="max-h-[60vh] min-h-64 overflow-y-auto rounded-2xl border border-border/60 bg-surface/40 p-4">
+        <section aria-label="Conversation messages" className="space-y-3">
+          {cursor ? (
+            <div className="flex justify-center">
+              <PremiumButton
+                premiumVariant="outline"
+                size="sm"
+                type="button"
+                disabled={loadingMore}
+                onClick={() => void loadMore()}
+              >
+                {loadingMore ? <Spinner className="size-4" /> : null}
+                {loadingMore ? "Loading…" : "Load older messages"}
+              </PremiumButton>
+            </div>
+          ) : null}
 
-        {items.length === 0 ? (
-          <EmptyState
-            icon={SendHorizontal}
-            title="Start the conversation"
-            description="Send the first message. It will be saved before it appears here."
-          />
-        ) : (
-          items.map((message) => {
-            const mine = message.senderId === viewerId;
-            return (
-              <div key={message.id} className={cn("flex", mine ? "justify-end" : "justify-start")}>
-                <div
-                  className={cn(
-                    "max-w-[85%] rounded-2xl px-3 py-2 text-sm break-words whitespace-pre-wrap",
-                    mine
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-foreground",
-                  )}
-                >
-                  {message.deleted ? (
-                    <span className="italic opacity-70">Message deleted</span>
-                  ) : (
-                    message.content
-                  )}
-                  <span
+          {items.length === 0 ? (
+            <EmptyState
+              icon={SendHorizontal}
+              title="Start the conversation"
+              description="Send the first message. It will be saved before it appears here."
+            />
+          ) : (
+            items.map((message) => {
+              const mine = message.senderId === viewerId;
+              return (
+                <div key={message.id} className={cn("flex", mine ? "justify-end" : "justify-start")}>
+                  <div
                     className={cn(
-                      "mt-1 block text-right text-[10px] opacity-70",
-                      mine ? "text-primary-foreground" : "text-muted-foreground",
+                      "max-w-[85%] rounded-2xl px-3 py-2 text-sm break-words whitespace-pre-wrap",
+                      mine
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-foreground",
                     )}
                   >
-                    {relativeTime(message.createdAt)}
-                  </span>
+                    {message.deleted ? (
+                      <span className="italic opacity-70">Message deleted</span>
+                    ) : (
+                      message.content
+                    )}
+                    <span
+                      className={cn(
+                        "mt-1 block text-right text-[10px] opacity-70",
+                        mine ? "text-primary-foreground" : "text-muted-foreground",
+                      )}
+                    >
+                      {relativeTime(message.createdAt)}
+                    </span>
+                    {!message.deleted ? (
+                      <div className="mt-0.5 flex justify-end">
+                        <ReportLink
+                          targetType="message"
+                          targetId={message.id}
+                          isAuthenticated
+                          loginHref={loginHref}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
-            );
-          })
-        )}
-        <div ref={bottomRef} aria-hidden="true" />
-      </section>
+              );
+            })
+          )}
+          <div ref={bottomRef} aria-hidden="true" />
+        </section>
+      </SensitiveSurface>
 
       <form
         className="space-y-2"

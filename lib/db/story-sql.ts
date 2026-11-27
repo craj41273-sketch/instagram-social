@@ -1,6 +1,10 @@
 import { and, sql, type SQL } from "drizzle-orm";
 import { stories, storyReactions, storyViews } from "@/lib/db/schema";
-import { buildStoryVisibilityCondition } from "@/lib/db/story-query";
+import {
+  buildStoryAccessCondition,
+  buildStoryAudienceCondition,
+  buildStoryVisibilityCondition,
+} from "@/lib/db/story-query";
 
 /**
  * Parameterized mutation statements. Each write rechecks story existence,
@@ -14,8 +18,9 @@ export function buildRecordStoryViewStatement(
   nowIso: string,
 ): SQL {
   const condition = and(
-    buildStoryVisibilityCondition(viewerId, nowIso),
+    buildStoryAccessCondition(viewerId, nowIso),
     sql`${stories.userId} <> ${viewerId}`,
+    buildStoryAudienceCondition(viewerId),
   );
 
   return sql`

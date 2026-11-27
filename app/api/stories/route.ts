@@ -101,6 +101,19 @@ export async function POST(request: NextRequest) {
     return error(parsed.error.issues[0]?.message ?? "Enter a valid story.", 400);
   }
 
+  const parseIdList = (key: string): string[] => {
+    const raw = formText(formData, key);
+    if (!raw) return [];
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      return Array.isArray(parsed)
+        ? parsed.filter((value): value is string => typeof value === "string")
+        : [];
+    } catch {
+      return [];
+    }
+  };
+
   const storyId = randomUUID();
   const storagePath = storyMediaPath(current.user.authUserId, storyId, metadata.extension);
   let uploaded = false;
@@ -123,6 +136,9 @@ export async function POST(request: NextRequest) {
       byteSize: metadata.size,
       caption: parsed.data.caption,
       textOverlay: parsed.data.textOverlay || null,
+      audience: formText(formData, "audience") || null,
+      userIds: parseIdList("userIds"),
+      excludedUserIds: parseIdList("excludedUserIds"),
     });
 
     revalidatePath("/posts");

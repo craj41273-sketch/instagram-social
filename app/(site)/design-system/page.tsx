@@ -1,12 +1,13 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Bell, ImageIcon, Search, Sparkles } from "lucide-react";
+import { Bell, EyeOff, ImageIcon, Search, Sparkles } from "lucide-react";
 import { PageContainer } from "@/components/layout/page-container";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorState } from "@/components/shared/error-state";
 import { FormField } from "@/components/shared/form-field";
 import { ImageContainer } from "@/components/shared/image-container";
+import { SensitiveSurface } from "@/components/shared/sensitive-surface";
 import {
   SkeletonCard,
   SkeletonLine,
@@ -404,6 +405,21 @@ export default function DesignSystemPage() {
               ratio="wide"
             />
           </div>
+        </Section>
+
+        <Section
+          title="Sensitive surface"
+          description="Discourages casual copy of private content; OS screenshots and recordings remain outside browser control."
+        >
+          <SensitiveSurface className="rounded-lg border border-border/60 bg-muted/30 p-4">
+            <div className="flex items-start gap-3">
+              <EyeOff className="mt-0.5 size-4 text-muted-foreground" aria-hidden="true" />
+              <p className="text-sm text-muted-foreground">
+                Right-click, drag, and text selection are disabled here. This is a
+                friction control, not a confidentiality boundary.
+              </p>
+            </div>
+          </SensitiveSurface>
         </Section>
 
         <Section

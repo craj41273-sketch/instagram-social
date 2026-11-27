@@ -9,9 +9,10 @@ import {
   unlikePost,
 } from "@/lib/db/engagement";
 import {
-  getPostOwnerId,
+  getVisiblePostOwnerId,
   recordPostNotification,
 } from "@/lib/db/notifications";
+import { loadHiddenLikeAuthors } from "@/lib/db/posts";
 import { toSafeMessage } from "@/lib/errors";
 import { logServerError } from "@/lib/logging";
 import type {
@@ -75,6 +76,11 @@ async function changeLike(
   }
 
   try {
+    const ownerId = await getVisiblePostOwnerId(parsed.data.postId, current.user.id);
+    if (!ownerId) {
+      return { status: "error", message: "That post is no longer available." };
+    }
+
     const state =
       intent === "like"
         ? await likePost(parsed.data.postId, current.user.id)
@@ -84,14 +90,17 @@ async function changeLike(
     }
 
     if (intent === "like") {
-      const ownerId = await getPostOwnerId(parsed.data.postId);
-      if (ownerId) {
-        await recordPostNotification(ownerId, current.user.id, parsed.data.postId, "like");
-      }
+      await recordPostNotification(ownerId, current.user.id, parsed.data.postId, "like");
     }
 
     revalidatePost(parsed.data.postId, current.user.username);
-    return { status: "success", liked: state.liked, likeCount: state.likeCount };
+    const hiddenLikes = await loadHiddenLikeAuthors([ownerId]);
+    return {
+      status: "success",
+      liked: state.liked,
+      likeCount:
+        ownerId !== current.user.id && hiddenLikes.has(ownerId) ? 0 : state.likeCount,
+    };
   } catch (cause) {
     logServerError("engagement.like.failed", cause, { postId: parsed.data.postId });
     return { status: "error", message: toSafeMessage(cause) };
@@ -139,6 +148,11 @@ export async function createCommentAction(
   }
 
   try {
+    const ownerId = await getVisiblePostOwnerId(parsed.data.postId, current.user.id);
+    if (!ownerId) {
+      return { status: "error", message: "That post is no longer available." };
+    }
+
     const created = await createComment(
       parsed.data.postId,
       current.user.id,
@@ -148,10 +162,7 @@ export async function createCommentAction(
       return { status: "error", message: "That post is no longer available." };
     }
 
-    const ownerId = await getPostOwnerId(parsed.data.postId);
-    if (ownerId) {
-      await recordPostNotification(ownerId, current.user.id, parsed.data.postId, "comment");
-    }
+    await recordPostNotification(ownerId, current.user.id, parsed.data.postId, "comment");
 
     revalidatePost(parsed.data.postId, current.user.username);
     return {

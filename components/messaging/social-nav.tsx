@@ -68,6 +68,9 @@ export function SocialNav({ userId, initialCounts }: SocialNavProps) {
         label="Notifications"
         count={userId ? counts.notifications : 0}
       />
+      <NavLink href="/settings" label="Settings" />
+      <NavLink href="/appeals" label="Appeals" />
+      <NavLink href="/admin" label="Admin" />
       <ThemeToggle />
     </nav>
   );
