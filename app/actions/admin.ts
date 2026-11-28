@@ -243,6 +243,18 @@ export async function applyModerationActionAction(
   });
   if (!parsed.success) return invalid("Please check the moderation details.", parsed.error);
 
+  if (
+    parsed.data.action === "suspend" ||
+    parsed.data.action === "ban" ||
+    parsed.data.action === "restore"
+  ) {
+    try {
+      staff = await requireStaff(true);
+    } catch (error) {
+      return failure("admin.moderation.staff", error);
+    }
+  }
+
   try {
     await applyModerationAction(staff, parsed.data);
     revalidateAdmin([

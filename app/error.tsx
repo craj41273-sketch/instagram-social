@@ -12,7 +12,10 @@ interface ErrorBoundaryProps {
 
 export default function ErrorBoundary({ error, reset }: ErrorBoundaryProps) {
   useEffect(() => {
-    console.error(error);
+    console.error(
+      "[luma:app.error]",
+      JSON.stringify({ name: error.name, digest: error.digest ?? null }),
+    );
   }, [error]);
 
   return (

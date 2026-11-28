@@ -6,8 +6,8 @@ import {
   cancelFollowRequestAction,
   removeFollowerAction,
   respondFollowRequestAction,
-} from "@/app/actions/privacy";
-import { initialActionState, type ActionState } from "@/app/actions/settings-types";
+} from "@/lib/static/actions";
+import { initialActionState, type ActionState } from "@/lib/static/actions";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { PremiumButton } from "@/components/ui/premium-button";
 import { Spinner } from "@/components/ui/spinner";

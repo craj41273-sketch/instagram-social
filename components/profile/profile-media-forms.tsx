@@ -3,7 +3,7 @@
 import { useEffect, useId, useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { ImagePlus, Upload } from "lucide-react";
-import { uploadProfileMediaAction } from "@/app/actions/profile-media";
+import { uploadProfileMediaAction } from "@/lib/static/actions";
 import { FormField } from "@/components/shared/form-field";
 import { ImageContainer } from "@/components/shared/image-container";
 import { PremiumButton } from "@/components/ui/premium-button";

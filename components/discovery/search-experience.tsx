@@ -287,8 +287,8 @@ export function SearchExperience({
                     Posts
                   </h2>
                   <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-                    {posts.map((post: SearchPost) => (
-                      <PostResult key={post.postId} post={post} />
+                    {posts.map((post: SearchPost, index: number) => (
+                      <PostResult key={post.postId} post={post} priority={index < 4} />
                     ))}
                   </ul>
                 </section>
@@ -368,7 +368,7 @@ function PeopleResult({
   );
 }
 
-function PostResult({ post }: { post: SearchPost }) {
+function PostResult({ post, priority }: { post: SearchPost; priority: boolean }) {
   const alt = post.caption
     ? `Post by @${post.authorUsername}: ${post.caption.slice(0, 120)}`
     : `Photo post by @${post.authorUsername}`;
@@ -384,6 +384,7 @@ function PostResult({ post }: { post: SearchPost }) {
           alt={alt}
           src={safeHttpUrl(post.thumbnailUrl) ?? undefined}
           ratio="square"
+          priority={priority}
           unoptimized
           sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
           className="rounded-xl"

@@ -23,13 +23,9 @@ export const metadata: Metadata = {
   description: "Discover real Luma photos, people, and trending posts.",
 };
 
-interface ExplorePageProps {
-  searchParams: Promise<{ cursor?: string; limit?: string; tag?: string }>;
-}
-
 /** Public, photo-first discovery built from existing post and follow records. */
-export default async function ExplorePage({ searchParams }: ExplorePageProps) {
-  const parsedQuery = postFeedQuerySchema.safeParse(await searchParams);
+export default async function ExplorePage() {
+  const parsedQuery = postFeedQuerySchema.safeParse({});
   const query = parsedQuery.success
     ? parsedQuery.data
     : { limit: 12, cursor: undefined, tag: undefined };
@@ -43,47 +39,54 @@ export default async function ExplorePage({ searchParams }: ExplorePageProps) {
 
   const viewerId = viewer?.user.id ?? null;
 
-  let page: PublicPostPage | null = null;
-  let feedFailed = false;
-  try {
-    page = await listRecentPosts({
+  const [feedResult, tagsResult, trendingResult, suggestionsResult] = await Promise.allSettled([
+    listRecentPosts({
       limit: query.limit,
       cursor: query.cursor,
       tag: query.tag,
       viewerUserId: viewerId,
-    });
-  } catch (error) {
-    logServerError("explore.page.feed", error);
+    }),
+    getExploreTags(8, viewerId),
+    getTrendingPosts(6, viewerId),
+    viewer
+      ? getSuggestedUsers(viewer.user.id, 6)
+      : Promise.resolve<Awaited<ReturnType<typeof getSuggestedUsers>>>([]),
+  ]);
+
+  let page: PublicPostPage | null = null;
+  let feedFailed = false;
+  if (feedResult.status === "fulfilled") {
+    page = feedResult.value;
+  } else {
+    logServerError("explore.page.feed", feedResult.reason);
     feedFailed = true;
   }
 
   let tags: ExploreTag[] = [];
   let tagsFailed = false;
-  try {
-    tags = await getExploreTags(8, viewerId);
-  } catch (error) {
-    logServerError("explore.page.tags", error);
+  if (tagsResult.status === "fulfilled") {
+    tags = tagsResult.value;
+  } else {
+    logServerError("explore.page.tags", tagsResult.reason);
     tagsFailed = true;
   }
 
   let trending: TrendingPost[] = [];
   let trendingFailed = false;
-  try {
-    trending = await getTrendingPosts(6, viewerId);
-  } catch (error) {
-    logServerError("explore.page.trending", error);
+  if (trendingResult.status === "fulfilled") {
+    trending = trendingResult.value;
+  } else {
+    logServerError("explore.page.trending", trendingResult.reason);
     trendingFailed = true;
   }
 
   let suggestions: Awaited<ReturnType<typeof getSuggestedUsers>> = [];
   let suggestionsFailed = false;
-  if (viewer) {
-    try {
-      suggestions = await getSuggestedUsers(viewer.user.id, 6);
-    } catch (error) {
-      logServerError("explore.page.suggestions", error);
-      suggestionsFailed = true;
-    }
+  if (suggestionsResult.status === "fulfilled") {
+    suggestions = suggestionsResult.value;
+  } else {
+    logServerError("explore.page.suggestions", suggestionsResult.reason);
+    suggestionsFailed = true;
   }
 
   const tagLinkClass = (active: boolean) =>

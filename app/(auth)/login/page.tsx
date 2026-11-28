@@ -8,13 +8,9 @@ export const metadata: Metadata = {
   description: "Log in to your Luma account.",
 };
 
-type LoginPageProps = {
-  searchParams: Promise<{ reset?: string; setup?: string }>;
-};
-
-export default async function LoginPage({ searchParams }: LoginPageProps) {
-  const params = await searchParams;
-  const notice = params.reset === "success" ? "reset" : params.setup === "retry" ? "setup" : null;
+export default async function LoginPage() {
+  // Query strings are request-time data and cannot be read during static prerender.
+  const notice = null;
 
   return (
     <AuthFormWrapper

@@ -8,15 +8,9 @@ export const metadata: Metadata = {
   description: "Verify the email address on your Luma account.",
 };
 
-type VerifyEmailPageProps = {
-  searchParams: Promise<{ token?: string | string[] }>;
-};
-
-export default async function VerifyEmailPage({
-  searchParams,
-}: VerifyEmailPageProps) {
-  const params = await searchParams;
-  const token = typeof params.token === "string" ? params.token : undefined;
+export default async function VerifyEmailPage() {
+  // Verification tokens are request-time data and cannot be read during static prerender.
+  const token = undefined;
 
   return (
     <AuthFormWrapper

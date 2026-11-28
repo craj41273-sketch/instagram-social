@@ -6,8 +6,8 @@ import { useRouter } from "next/navigation";
 import {
   initialReportActionState,
   type ReportActionState,
-} from "@/app/actions/reporting-types";
-import { createAppealAction } from "@/app/actions/reporting";
+} from "@/lib/static/actions";
+import { createAppealAction } from "@/lib/static/actions";
 import { FormField } from "@/components/shared/form-field";
 import { PremiumButton } from "@/components/ui/premium-button";
 import { Spinner } from "@/components/ui/spinner";

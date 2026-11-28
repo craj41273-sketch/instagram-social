@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Brand } from "@/components/shared/brand";
 import { PageContainer } from "@/components/layout/page-container";
 import { SocialNav } from "@/components/messaging/social-nav";
+import { getStaffContext, isAdmin as isStaffAdmin } from "@/lib/admin/authorization";
 import { getApiProfile } from "@/lib/api/identity";
 import { getUnreadCounts } from "@/lib/db/messaging";
 import { logServerError } from "@/lib/logging";
@@ -11,6 +12,12 @@ import type { UnreadCounts } from "@/lib/messaging/types";
 /** Responsive shell for profiles, posts, explore, search, and messages. */
 export default async function SocialLayout({ children }: { children: ReactNode }) {
   const current = await getApiProfile("social.layout.identity");
+  let isAdmin = false;
+  try {
+    isAdmin = isStaffAdmin(await getStaffContext());
+  } catch (error) {
+    logServerError("social.layout.staff", error);
+  }
   let unread: UnreadCounts = { messages: 0, notifications: 0 };
   if (current) {
     try {
@@ -31,7 +38,11 @@ export default async function SocialLayout({ children }: { children: ReactNode }
           >
             <Brand />
           </Link>
-          <SocialNav userId={current?.user.id ?? null} initialCounts={unread} />
+          <SocialNav
+            userId={current?.user.id ?? null}
+            initialCounts={unread}
+            isAdmin={isAdmin}
+          />
         </PageContainer>
       </header>
       <main className="flex-1 py-8 sm:py-10">{children}</main>

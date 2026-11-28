@@ -94,3 +94,9 @@ export default async function StoryViewerListPage({ params }: ViewerListPageProp
     </PageContainer>
   );
 }
+
+export const dynamicParams = false;
+
+export function generateStaticParams() {
+  return [{ storyId: "demo" }];
+}

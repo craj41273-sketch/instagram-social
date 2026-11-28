@@ -7,7 +7,7 @@ import { Mail } from "lucide-react";
 import {
   resendVerificationAction,
   retryProfileSetupFormAction,
-} from "@/app/actions/auth";
+} from "@/lib/static/actions";
 import { AuthAlert } from "@/components/auth/auth-alert";
 import { SubmitButton } from "@/components/auth/submit-button";
 import { FormField } from "@/components/shared/form-field";

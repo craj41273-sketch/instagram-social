@@ -20,7 +20,7 @@ export function ProfilePostsGrid({ page }: { page: ProfilePostPage }) {
   return (
     <div>
       <ul className="grid grid-cols-3 gap-1.5 sm:gap-2">
-        {page.items.map((post) => {
+        {page.items.map((post, index) => {
           const src = safeHttpUrl(post.thumbnailUrl) ?? undefined;
 
           return (
@@ -34,6 +34,7 @@ export function ProfilePostsGrid({ page }: { page: ProfilePostPage }) {
                   alt={post.caption ? `Post: ${post.caption.slice(0, 80)}` : "Profile post"}
                   src={src}
                   ratio="square"
+                  priority={index < 4}
                   unoptimized
                   sizes="(max-width: 640px) 33vw, 240px"
                   className="rounded-lg transition-transform duration-300 group-hover:scale-[1.02]"

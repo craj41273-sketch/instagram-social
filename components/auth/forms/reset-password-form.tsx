@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useActionState } from "react";
 import Link from "next/link";
-import { resetPasswordAction } from "@/app/actions/auth";
+import { resetPasswordAction } from "@/lib/static/actions";
 import { AuthAlert } from "@/components/auth/auth-alert";
 import { PasswordInput } from "@/components/auth/password-input";
 import { PasswordStrength } from "@/components/auth/password-strength";

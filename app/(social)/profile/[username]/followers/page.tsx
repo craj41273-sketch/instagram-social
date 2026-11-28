@@ -7,14 +7,11 @@ import { loadSocialList } from "@/lib/profile/social-list-data";
 
 interface SocialListPageProps {
   params: Promise<{ username: string }>;
-  searchParams: Promise<{ cursor?: string; limit?: string }>;
 }
 
-export default async function FollowersPage({
-  params,
-  searchParams,
-}: SocialListPageProps) {
-  const [{ username }, query] = await Promise.all([params, searchParams]);
+export default async function FollowersPage({ params }: SocialListPageProps) {
+  const { username } = await params;
+  const query: { cursor?: string; limit?: string } = {};
   const result = await loadSocialList(
     "followers",
     username,
@@ -42,4 +39,10 @@ export default async function FollowersPage({
       hidden={!canViewList}
     />
   );
+}
+
+export const dynamicParams = false;
+
+export function generateStaticParams() {
+  return [{ username: "demo" }];
 }

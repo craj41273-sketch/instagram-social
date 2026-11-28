@@ -66,3 +66,9 @@ export default async function StoryViewerPage({ params }: StoryViewerPageProps) 
 
   return <StoryViewer groups={groups} initialUserId={userId} />;
 }
+
+export const dynamicParams = false;
+
+export function generateStaticParams() {
+  return [{ userId: "demo" }];
+}

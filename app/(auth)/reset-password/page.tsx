@@ -7,15 +7,9 @@ export const metadata: Metadata = {
   description: "Choose a new password for your Luma account.",
 };
 
-type ResetPasswordPageProps = {
-  searchParams: Promise<{ token?: string | string[] }>;
-};
-
-export default async function ResetPasswordPage({
-  searchParams,
-}: ResetPasswordPageProps) {
-  const params = await searchParams;
-  const token = typeof params.token === "string" ? params.token : undefined;
+export default async function ResetPasswordPage() {
+  // Recovery tokens are request-time data and cannot be read during static prerender.
+  const token = undefined;
 
   return (
     <AuthFormWrapper

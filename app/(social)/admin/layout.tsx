@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { headers } from "next/headers";
 import { AdminNav } from "@/components/admin/admin-nav";
 import { PageContainer } from "@/components/layout/page-container";
 import { isAdmin, requireStaffPage } from "@/lib/admin/authorization";
@@ -7,10 +6,8 @@ import { isAdmin, requireStaffPage } from "@/lib/admin/authorization";
 /** Non-staff never reach the shell: the page guard redirects before rendering. */
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   const staff = await requireStaffPage();
-  const headerList = await headers();
-  // shortcut: x-pathname only exists when a proxy supplies it; without it no
-  // nav item is marked active, which does not affect access or navigation.
-  const currentPath = headerList.get("x-pathname") ?? "";
+  // shortcut: static export has no proxy headers, so no nav item is marked active.
+  const currentPath = "";
 
   return (
     <PageContainer className="space-y-6 pb-4">

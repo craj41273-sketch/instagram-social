@@ -161,8 +161,16 @@ export async function getFollowCounts(
   try {
     const result = await getDb().execute<{ followers: number; following: number }>(sql`
       SELECT
-        (SELECT count(*)::int FROM "follows" WHERE "following_id" = ${userId}) AS followers,
-        (SELECT count(*)::int FROM "follows" WHERE "follower_id" = ${userId}) AS following
+        (
+          SELECT count(*)::int FROM "follows" f
+          INNER JOIN "users" u ON u.id = f.follower_id
+          WHERE f.following_id = ${userId} AND u.account_status <> 'banned'
+        ) AS followers,
+        (
+          SELECT count(*)::int FROM "follows" f
+          INNER JOIN "users" u ON u.id = f.following_id
+          WHERE f.follower_id = ${userId} AND u.account_status <> 'banned'
+        ) AS following
     `);
     const row = Array.isArray(result)
       ? result[0]
@@ -212,7 +220,7 @@ async function listFollowEdges(
       .from(follows)
       .innerJoin(users, eq(users.id, userIdColumn))
       .leftJoin(profiles, eq(profiles.userId, users.id))
-      .where(condition)
+      .where(and(condition, sql`${users.accountStatus} <> 'banned'`))
       .orderBy(buildFollowPageOrder())
       .limit(limit + 1);
 

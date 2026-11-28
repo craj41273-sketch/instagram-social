@@ -248,7 +248,7 @@ test("story routes use session identity and never accept expiry from a form", ()
   const actions = readFileSync("app/actions/stories.ts", "utf8");
   const migration = readFileSync("drizzle/0006_stories.sql", "utf8");
 
-  assert.match(uploadRoute, /getCurrentProfile\(\)/);
+  assert.match(uploadRoute, /getActiveProfile\(\)/);
   assert.match(uploadRoute, /isSameOriginPost\(/);
   assert.equal(uploadRoute.includes('formData.get("expiresAt")'), false);
   assert.equal(uploadRoute.includes("SUPABASE_SERVICE_ROLE_KEY"), false);

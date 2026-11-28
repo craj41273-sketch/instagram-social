@@ -17,14 +17,18 @@ import { findUserByUsername } from "@/lib/db/users";
 import { parseUserId } from "@/lib/db/profile-sql";
 import {
   canMessage,
+  containsHiddenWord,
   filterHiddenWords,
   getPrivacyContext,
+  getPrivacySettings,
   requiresMessageRequest,
 } from "@/lib/privacy/service";
 import {
   buildConversationAccessCondition,
+  buildConversationRequestAccessCondition,
   buildCreateConversationStatement,
   buildInboxCondition,
+  buildInboxRequestCondition,
   buildMarkConversationReadStatement,
   buildMessagePageCondition,
   buildSendMessageStatement,
@@ -69,6 +73,12 @@ function toIso(value: unknown): string {
 function numeric(value: unknown): number {
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function requestStatus(value: unknown): InboxItem["requestStatus"] {
+  return value === "pending" || value === "accepted" || value === "declined"
+    ? value
+    : "none";
 }
 
 function validateConversationInput(conversationId: string, viewerId: string): void {
@@ -180,7 +190,12 @@ export async function getConversationHeader(
       )
       .innerJoin(users, eq(users.id, other.userId))
       .leftJoin(profiles, eq(profiles.userId, users.id))
-      .where(buildConversationAccessCondition(viewerId, conversationId))
+      .where(
+        and(
+          buildConversationAccessCondition(viewerId, conversationId),
+          buildConversationRequestAccessCondition(viewerId),
+        ),
+      )
       .limit(1);
 
     const row = rows[0];
@@ -206,12 +221,13 @@ export async function listInbox(
   const other = alias(conversationParticipants, "other");
 
   const unreadCount = sql<number>`(
-    select count(*)::int
+    select least(count(*), 100)::int
     from messages m
     inner join conversation_participants cp
       on cp.conversation_id = m.conversation_id and cp.user_id = ${viewerId}
     where m.conversation_id = ${conversations.id}
       and ${buildUnreadMessageCondition(viewerId)}
+      and ${buildConversationRequestAccessCondition(viewerId, sql`m.conversation_id`)}
   )`;
 
   // The CASE prevents deleted content from ever leaving the database.
@@ -243,6 +259,8 @@ export async function listInbox(
         unreadCount,
         preview,
         previewDeleted,
+        requestStatus: conversationRequests.status,
+        requestRecipientId: conversationRequests.recipientId,
       })
       .from(conversationParticipants)
       .innerJoin(
@@ -258,10 +276,15 @@ export async function listInbox(
       )
       .innerJoin(users, eq(users.id, other.userId))
       .leftJoin(profiles, eq(profiles.userId, users.id))
+      .leftJoin(
+        conversationRequests,
+        eq(conversationRequests.conversationId, conversations.id),
+      )
       .where(
         and(
           eq(conversationParticipants.userId, viewerId),
           buildInboxCondition(viewerId, cursor),
+          buildInboxRequestCondition(viewerId),
           canMessagePeerCondition(viewerId),
         ),
       )
@@ -270,17 +293,30 @@ export async function listInbox(
 
     const hasMore = rows.length > options.limit;
     const visible = hasMore ? rows.slice(0, options.limit) : rows;
-    const items: InboxItem[] = visible.map((row) => ({
-      conversationId: row.conversationId,
-      userId: row.userId,
-      username: row.username,
-      displayName: row.displayName ?? row.username,
-      avatarUrl: row.avatarUrl,
-      lastMessageAt: toIso(row.lastMessageAt),
-      lastMessagePreview: row.preview ?? "No messages yet",
-      lastMessageDeleted: row.previewDeleted,
-      unreadCount: numeric(row.unreadCount),
-    }));
+    const hiddenWords = (await getPrivacySettings(viewerId)).hiddenWords;
+    const items: InboxItem[] = visible.map((row) => {
+      const status = requestStatus(row.requestStatus);
+      const canRespondToRequest = row.requestRecipientId === viewerId && status === "pending";
+      const previewText = row.preview ?? "No messages yet";
+      const preview = canRespondToRequest
+        ? "Message request — accept to view messages"
+        : containsHiddenWord(previewText, hiddenWords)
+          ? "Message hidden by your filters"
+          : previewText;
+      return {
+        conversationId: row.conversationId,
+        userId: row.userId,
+        username: row.username,
+        displayName: row.displayName ?? row.username,
+        avatarUrl: row.avatarUrl,
+        lastMessageAt: toIso(row.lastMessageAt),
+        lastMessagePreview: preview,
+        lastMessageDeleted: canRespondToRequest ? false : row.previewDeleted,
+        unreadCount: canRespondToRequest ? 0 : numeric(row.unreadCount),
+        requestStatus: status,
+        canRespondToRequest,
+      };
+    });
     const last = visible.at(-1);
 
     return {
@@ -320,7 +356,12 @@ export async function listMessages(
         deletedAt: messages.deletedAt,
       })
       .from(messages)
-      .where(buildMessagePageCondition(conversationId, viewerId, cursor))
+      .where(
+        and(
+          buildMessagePageCondition(conversationId, viewerId, cursor),
+          buildConversationRequestAccessCondition(viewerId, conversationId),
+        ),
+      )
       .orderBy(desc(messages.createdAt), desc(messages.id))
       .limit(options.limit + 1);
 
@@ -411,6 +452,9 @@ export async function markConversationRead(
   validateConversationInput(conversationId, viewerId);
 
   try {
+    const header = await getConversationHeader(conversationId, viewerId);
+    if (!header) return false;
+
     const result = await getDb().execute(
       buildMarkConversationReadStatement(viewerId, conversationId),
     );
@@ -422,16 +466,47 @@ export async function markConversationRead(
   }
 }
 
+/** Only the recipient can answer, and only while the row is still pending. */
+export async function respondToConversationRequest(
+  conversationId: string,
+  recipientId: string,
+  action: "accept" | "decline",
+): Promise<boolean> {
+  validateConversationInput(conversationId, recipientId);
+
+  try {
+    const rows = await getDb()
+      .update(conversationRequests)
+      .set({
+        status: action === "accept" ? "accepted" : "declined",
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(conversationRequests.conversationId, conversationId),
+          eq(conversationRequests.recipientId, recipientId),
+          eq(conversationRequests.status, "pending"),
+        ),
+      )
+      .returning({ id: conversationRequests.id });
+    return rows.length > 0;
+  } catch (error) {
+    logServerError("db.respondToConversationRequest", error, { conversationId });
+    throw new DatabaseError();
+  }
+}
+
 export async function getUnreadMessageCount(viewerId: string): Promise<number> {
   if (!parseUserId(viewerId)) return 0;
 
   try {
     const result = await getDb().execute(sql`
-      select count(*)::int as count
+      select least(count(*), 100)::int as count
       from messages m
       inner join conversation_participants cp
         on cp.conversation_id = m.conversation_id and cp.user_id = ${viewerId}
       where ${buildUnreadMessageCondition(viewerId)}
+        and ${buildConversationRequestAccessCondition(viewerId, sql`m.conversation_id`)}
     `);
     return numeric(extractRows<RawRow>(result)[0]?.count);
   } catch (error) {
@@ -448,11 +523,12 @@ export async function getUnreadCounts(viewerId: string): Promise<UnreadCounts> {
     const result = await getDb().execute(sql`
       select
         (
-          select count(*)::int
+          select least(count(*), 100)::int
           from messages m
           inner join conversation_participants cp
             on cp.conversation_id = m.conversation_id and cp.user_id = ${viewerId}
           where ${buildUnreadMessageCondition(viewerId)}
+            and ${buildConversationRequestAccessCondition(viewerId, sql`m.conversation_id`)}
         ) as messages,
         (
           select count(*)::int

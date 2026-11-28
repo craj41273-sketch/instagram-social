@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
-import { getCurrentProfile } from "@/lib/auth/dal";
+import { getActiveProfile } from "@/lib/auth/dal";
 import {
   createPostRecord,
   deletePostRecordById,
@@ -9,7 +9,7 @@ import {
   insertPostMedia,
 } from "@/lib/db/posts";
 import type { NewPostMedia } from "@/lib/db/schema";
-import { toSafeMessage } from "@/lib/errors";
+import { ValidationError, toSafeMessage } from "@/lib/errors";
 import { logServerError } from "@/lib/logging";
 import { extractHashtags } from "@/lib/posts/hashtags";
 import { consumeRateLimit } from "@/lib/security/rate-limit";
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
 
   let current;
   try {
-    current = await getCurrentProfile();
+    current = await getActiveProfile();
   } catch (cause) {
     logServerError("posts.create.identity", cause);
     return error("We could not verify your account. Please try again.", 401);
@@ -58,8 +58,8 @@ export async function POST(request: NextRequest) {
   if (!current) return error("Sign in to publish a post.", 401);
 
   const viewerId = current.user.id;
-  if (!consumeRateLimit(`posts:create:${viewerId}`, 6, 10 * 60_000).allowed) {
-    return error("Too many posts. Please wait a moment before trying again.", 429);
+  if (!consumeRateLimit(`posts:create:request:${viewerId}`, 30, 10 * 60_000).allowed) {
+    return error("Too many uploads. Please try again.", 429);
   }
 
   let formData: FormData;
@@ -94,6 +94,10 @@ export async function POST(request: NextRequest) {
     return error("We could not read the image details. Please try again.", 400);
   }
 
+  if (!consumeRateLimit(`posts:create:${viewerId}`, 6, 10 * 60_000).allowed) {
+    return error("Too many posts. Please wait a moment before trying again.", 429);
+  }
+
   const postId = randomUUID();
   const uploadedPaths: string[] = [];
   let postCreated = false;
@@ -102,7 +106,15 @@ export async function POST(request: NextRequest) {
     const mediaValues: NewPostMedia[] = [];
 
     for (const [index, file] of files.entries()) {
-      const validated = validateImageMetadata(file, IMAGE_LIMITS.POST_MEDIA_BYTES);
+      let validated: ReturnType<typeof validateImageMetadata>;
+      try {
+        validated = validateImageMetadata(file, IMAGE_LIMITS.POST_MEDIA_BYTES);
+      } catch (cause) {
+        return error(
+          cause instanceof Error ? cause.message : "That image is not valid.",
+          400,
+        );
+      }
       const storagePath = buildPostMediaPath(
         current.user.authUserId,
         postId,
@@ -147,7 +159,10 @@ export async function POST(request: NextRequest) {
     }
     await removeStorageObjects(STORAGE_BUCKETS.POST_MEDIA, uploadedPaths);
     logServerError("posts.create.failed", cause, { userId: viewerId });
-    return error(toSafeMessage(cause), 500);
+    return error(
+      toSafeMessage(cause),
+      cause instanceof ValidationError ? 400 : 500,
+    );
   }
 
   revalidatePath("/posts");

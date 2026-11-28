@@ -16,13 +16,9 @@ export const metadata: Metadata = {
   description: "One-to-one conversations with people on Luma.",
 };
 
-interface MessagesPageProps {
-  searchParams: Promise<{ cursor?: string; limit?: string }>;
-}
-
-export default async function MessagesPage({ searchParams }: MessagesPageProps) {
+export default async function MessagesPage() {
   const current = await requireProfile();
-  const parsed = inboxPageQuerySchema.safeParse(await searchParams);
+  const parsed = inboxPageQuerySchema.safeParse({});
   const query = parsed.success ? parsed.data : { limit: INBOX_PAGE_SIZE };
 
   let page;

@@ -71,7 +71,11 @@ export function NotificationCenter({ initialPage, limit }: NotificationCenterPro
     if (document.hidden) return;
     try {
       const params = new URLSearchParams({ limit: String(limit) });
-      setPage(await fetchJson<NotificationPage>(`/api/notifications?${params}`));
+      const refreshed = await fetchJson<NotificationPage>(`/api/notifications?${params}`);
+      setPage((current) => ({
+        items: mergePages(current.items, refreshed.items),
+        nextCursor: current.nextCursor ?? refreshed.nextCursor,
+      }));
       setError(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Notifications could not refresh.");
@@ -241,7 +245,11 @@ function NotificationRow({
         </span>
       </span>
       {unread ? (
-        <span className="mt-2 size-2 shrink-0 rounded-full bg-primary" aria-label="Unread" />
+        <span
+          className="mt-2 size-2 shrink-0 rounded-full bg-primary"
+          role="img"
+          aria-label="Unread"
+        />
       ) : null}
     </span>
   );

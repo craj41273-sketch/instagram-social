@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useActionState } from "react";
 import Link from "next/link";
-import { loginAction } from "@/app/actions/auth";
+import { loginAction } from "@/lib/static/actions";
 import { AuthAlert } from "@/components/auth/auth-alert";
 import { AuthCheckbox } from "@/components/auth/auth-checkbox";
 import { PasswordInput } from "@/components/auth/password-input";

@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useActionState } from "react";
 import Link from "next/link";
-import { forgotPasswordAction } from "@/app/actions/auth";
+import { forgotPasswordAction } from "@/lib/static/actions";
 import { AuthAlert } from "@/components/auth/auth-alert";
 import { SubmitButton } from "@/components/auth/submit-button";
 import { FormField } from "@/components/shared/form-field";

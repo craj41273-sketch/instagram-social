@@ -1,5 +1,5 @@
 import { sql, type SQL } from "drizzle-orm";
-import { conversations, messages } from "@/lib/db/schema";
+import { conversationRequests, conversations, messages } from "@/lib/db/schema";
 import type { PageCursor } from "@/lib/pagination";
 
 /**
@@ -102,6 +102,38 @@ export function buildConversationAccessCondition(
   `;
 }
 
+/**
+ * Request state is role-aware: recipients are blocked while pending or declined;
+ * request senders stay open while pending but lose access once declined.
+ */
+export function buildConversationRequestAccessCondition(
+  viewerId: string,
+  conversationId: SQL | string = sql`${conversations.id}`,
+): SQL {
+  return sql`
+    not exists (
+      select 1 from ${conversationRequests} cr
+      where cr.conversation_id = ${conversationId}
+        and (
+          (cr.recipient_id = ${viewerId} and cr.status in ('pending', 'declined'))
+          or (cr.sender_id = ${viewerId} and cr.status = 'declined')
+        )
+    )
+  `;
+}
+
+/** Inbox rows hide declined requests; pending rows remain safe, respondable cards. */
+export function buildInboxRequestCondition(viewerId: string): SQL {
+  return sql`
+    not exists (
+      select 1 from ${conversationRequests} cr
+      where cr.conversation_id = ${conversations.id}
+        and cr.status = 'declined'
+        and (cr.recipient_id = ${viewerId} or cr.sender_id = ${viewerId})
+    )
+  `;
+}
+
 /** Unread rows are other participants' live messages after this user's read mark. */
 export function buildUnreadMessageCondition(viewerId: string): SQL {
   return sql`
@@ -200,6 +232,12 @@ export function buildSendMessageStatement(input: {
       from member other
       cross join inserted m
       where other.user_id <> ${senderId}::uuid
+        and not exists (
+          select 1 from conversation_requests cr
+          where cr.conversation_id = ${conversationId}::uuid
+            and cr.recipient_id = other.user_id
+            and cr.status in ('pending', 'declined')
+        )
       on conflict (recipient_id, actor_id, type, entity_id)
       do update set created_at = excluded.created_at, read_at = null
       returning id

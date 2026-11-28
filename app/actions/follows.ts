@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { getCurrentProfile } from "@/lib/auth/dal";
+import { getActiveProfile } from "@/lib/auth/dal";
 import { getDb } from "@/lib/db";
 import { unfollowUser } from "@/lib/db/follows";
 import { getPublicProfileByUsername, isPrivateProfile } from "@/lib/db/profiles";
@@ -57,7 +57,7 @@ export async function followAction(
 
   let current;
   try {
-    current = await getCurrentProfile();
+    current = await getActiveProfile();
   } catch (error) {
     logServerError("follow.identity", error);
     return { status: "error", message: "We could not verify your account. Please try again." };

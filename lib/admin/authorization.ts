@@ -1,6 +1,6 @@
 import "server-only";
 import { redirect } from "next/navigation";
-import { getCurrentProfile } from "@/lib/auth/dal";
+import { getActiveProfile } from "@/lib/auth/dal";
 import { AUTHENTICATED_HOME, LOGIN_ROUTE } from "@/lib/auth/constants";
 import { AuthenticationError, AuthorizationError } from "@/lib/errors";
 
@@ -12,7 +12,7 @@ export interface StaffContext {
 
 /** Derives staff authority from the verified session and Neon role only. */
 export async function getStaffContext(): Promise<StaffContext | null> {
-  const current = await getCurrentProfile();
+  const current = await getActiveProfile();
   if (!current) return null;
 
   return {

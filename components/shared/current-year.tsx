@@ -1,12 +1,7 @@
-import { cacheLife } from "next/cache";
-
 /**
- * Cached so the current year can be included in the prerendered shell without
- * using an unstable `new Date()` value during rendering.
+ * Static export has no Cache Components runtime. The year is fixed at build
+ * time, which is sufficient for the prerendered footer.
  */
 export async function getCurrentYear(): Promise<number> {
-  "use cache";
-  cacheLife("days");
-
   return new Date().getFullYear();
 }

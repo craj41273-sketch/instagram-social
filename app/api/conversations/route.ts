@@ -1,6 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
 import { getApiProfile } from "@/lib/api/identity";
+import { isActiveUser } from "@/lib/auth/dal";
 import { createConversation, listInbox } from "@/lib/db/messaging";
 import { toSafeMessage } from "@/lib/errors";
 import { logServerError } from "@/lib/logging";
@@ -45,6 +46,12 @@ export async function POST(request: NextRequest) {
   const current = await getApiProfile("conversations.create.identity");
   if (!current) {
     return NextResponse.json({ error: "Sign in to send messages." }, { status: 401 });
+  }
+  if (!isActiveUser(current.user)) {
+    return NextResponse.json(
+      { error: "Your account cannot perform this action." },
+      { status: 403 },
+    );
   }
 
   if (

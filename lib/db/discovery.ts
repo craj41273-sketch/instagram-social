@@ -15,6 +15,7 @@ import {
   buildDiscoverableUserCondition,
   buildPeopleSearchCondition,
   buildPostSearchCondition,
+  buildProfileInfoVisibilityCondition,
   buildRecentTagCondition,
   buildTrendingCondition,
 } from "@/lib/db/discovery-query";
@@ -116,7 +117,7 @@ export async function searchPeople(
         u.username AS username,
         p.display_name AS display_name,
         p.avatar_url AS avatar_url,
-        p.bio AS bio,
+        case when ${buildProfileInfoVisibilityCondition(viewerUserId)} then p.bio else null end AS bio,
         ${following} AS is_following
       FROM ${users} u
       LEFT JOIN ${profiles} p ON p.user_id = u.id

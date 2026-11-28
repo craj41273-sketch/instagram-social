@@ -34,7 +34,7 @@ export function ExploreGrid({ page, tag }: ExploreGridProps) {
   return (
     <div className="space-y-5">
       <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 xl:grid-cols-5">
-        {page.items.map((post) => {
+        {page.items.map((post, index) => {
           const src = safeHttpUrl(post.media[0]?.publicUrl) ?? undefined;
           const alt = post.caption
             ? `Post by @${post.author.username}: ${post.caption.slice(0, 120)}`
@@ -51,6 +51,7 @@ export function ExploreGrid({ page, tag }: ExploreGridProps) {
                   alt={alt}
                   src={src}
                   ratio="square"
+                  priority={index < 4}
                   unoptimized
                   sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 20vw"
                   className="rounded-xl"

@@ -15,10 +15,6 @@ export const metadata: Metadata = {
   description: "Staff view of accounts, trust, and admin-authored risk assessments.",
 };
 
-interface UsersPageProps {
-  searchParams: Promise<{ q?: string; status?: string; page?: string }>;
-}
-
 const STATUSES = ["active", "warning", "restricted", "suspended", "banned"] as const;
 const selectClass =
   "h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -31,9 +27,9 @@ function pageHref(q: string | undefined, status: string | undefined, page: numbe
   return `/admin/users?${params.toString()}`;
 }
 
-export default async function AdminUsersPage({ searchParams }: UsersPageProps) {
+export default async function AdminUsersPage() {
   await requireStaffPage();
-  const parsed = adminUserQuerySchema.safeParse(await searchParams);
+  const parsed = adminUserQuerySchema.safeParse({});
   const query = parsed.success ? parsed.data : { page: 1 };
   const q = "q" in query ? query.q : undefined;
   const status = "status" in query ? query.status : undefined;

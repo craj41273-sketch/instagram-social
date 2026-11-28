@@ -71,53 +71,85 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
 
   let canView = false;
   let requested = false;
-  try {
-    const context = await getPrivacyContext(viewerId, profile.userId);
-    const privateProfile = await isPrivateProfile(profile.userId);
+  const [contextResult, privateResult, requestResult] = await Promise.allSettled([
+    getPrivacyContext(viewerId, profile.userId),
+    isPrivateProfile(profile.userId),
+    getFollowRequestState(viewerId, profile.userId),
+  ]);
+  if (contextResult.status === "rejected") {
+    logServerError("profile.page.privacy", contextResult.reason, { userId: profile.userId });
+  }
+  if (privateResult.status === "rejected") {
+    logServerError("profile.page.privacy", privateResult.reason, { userId: profile.userId });
+  }
+  if (requestResult.status === "rejected") {
+    logServerError("profile.page.privacy", requestResult.reason, { userId: profile.userId });
+  }
+  if (contextResult.status === "fulfilled" && privateResult.status === "fulfilled") {
+    const context = contextResult.value;
     canView = canViewPosts({
       ...context,
-      settings: { ...context.settings, isPrivate: privateProfile },
+      settings: { ...context.settings, isPrivate: privateResult.value },
     });
-    requested = (await getFollowRequestState(viewerId, profile.userId)) === "pending";
-  } catch (error) {
-    logServerError("profile.page.privacy", error, { userId: profile.userId });
   }
+  requested = requestResult.status === "fulfilled" && requestResult.value === "pending";
+
+  const emptyList = { items: [], nextCursor: null };
+  const [
+    socialResult,
+    postCountResult,
+    followersPageResult,
+    followingPageResult,
+    postsResult,
+    suggestionsResult,
+    hypeResult,
+  ] = await Promise.allSettled([
+    canView
+      ? (async () => {
+          const counts = await getFollowCounts(profile.userId);
+          const following = viewerId && !isOwner ? await isFollowing(viewerId, profile.userId) : false;
+          return { counts, following };
+        })()
+      : Promise.resolve({ counts: { followers: 0, following: 0 }, following: false }),
+    canView ? getPostCountByUserId(profile.userId) : Promise.resolve(0),
+    canView
+      ? listFollowers(profile.userId, { viewerUserId: viewerId, limit: LIST_PAGE_SIZE })
+      : Promise.resolve(emptyList),
+    canView
+      ? listFollowing(profile.userId, { viewerUserId: viewerId, limit: LIST_PAGE_SIZE })
+      : Promise.resolve(emptyList),
+    canView
+      ? listProfilePosts(profile.userId, {
+          limit: LIST_PAGE_SIZE,
+          viewerUserId: viewerId,
+        })
+      : Promise.resolve(null),
+    viewerId
+      ? getSuggestedUsers(viewerId, 6)
+      : Promise.resolve<Awaited<ReturnType<typeof getSuggestedUsers>>>([]),
+    viewerId && !isOwner
+      ? getTrustStats(profile.userId, viewerId).then((stats) => stats.viewerHasHype)
+      : Promise.resolve(false),
+  ]);
 
   let counts = { followers: 0, following: 0 };
   let following = false;
-  if (canView) {
-    try {
-      counts = await getFollowCounts(profile.userId);
-      if (viewerId && !isOwner) {
-        following = await isFollowing(viewerId, profile.userId);
-      }
-    } catch (error) {
-      logServerError("profile.page.social", error, { userId: profile.userId });
-      return <ProfileLoadError username={profile.username} />;
-    }
+  if (socialResult.status === "fulfilled") {
+    counts = socialResult.value.counts;
+    following = socialResult.value.following;
+  } else {
+    logServerError("profile.page.social", socialResult.reason, { userId: profile.userId });
+    return <ProfileLoadError username={profile.username} />;
   }
 
   let postCount = 0;
   let postsError = false;
-  if (canView) {
-    try {
-      postCount = await getPostCountByUserId(profile.userId);
-    } catch (error) {
-      logServerError("profile.page.postCount", error, { userId: profile.userId });
-      postsError = true;
-    }
+  if (postCountResult.status === "fulfilled") {
+    postCount = postCountResult.value;
+  } else {
+    logServerError("profile.page.postCount", postCountResult.reason, { userId: profile.userId });
+    postsError = true;
   }
-
-  const emptyList = { items: [], nextCursor: null };
-  const [followersPageResult, followingPageResult] = canView
-    ? await Promise.allSettled([
-        listFollowers(profile.userId, { viewerUserId: viewerId, limit: LIST_PAGE_SIZE }),
-        listFollowing(profile.userId, { viewerUserId: viewerId, limit: LIST_PAGE_SIZE }),
-      ])
-    : [
-        { status: "fulfilled" as const, value: emptyList },
-        { status: "fulfilled" as const, value: emptyList },
-      ];
 
   if (followersPageResult.status === "rejected") {
     logServerError("profile.page.followers", followersPageResult.reason, {
@@ -138,34 +170,25 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
   }
 
   let posts = null;
-  if (canView && !postsError) {
-    try {
-      posts = await listProfilePosts(profile.userId, {
-        limit: LIST_PAGE_SIZE,
-        viewerUserId: viewerId,
-      });
-    } catch (error) {
-      logServerError("profile.page.posts", error, { userId: profile.userId });
-      postsError = true;
-    }
+  if (postsResult.status === "fulfilled") {
+    posts = postsResult.value;
+  } else if (canView) {
+    logServerError("profile.page.posts", postsResult.reason, { userId: profile.userId });
+    postsError = true;
   }
 
   let suggestions: Awaited<ReturnType<typeof getSuggestedUsers>> = [];
-  if (viewerId) {
-    try {
-      suggestions = await getSuggestedUsers(viewerId, 6);
-    } catch (error) {
-      logServerError("profile.page.suggestions", error, { userId: viewerId });
-    }
+  if (suggestionsResult.status === "fulfilled") {
+    suggestions = suggestionsResult.value;
+  } else {
+    logServerError("profile.page.suggestions", suggestionsResult.reason, { userId: viewerId });
   }
 
   let viewerHasHype = false;
-  if (viewerId && !isOwner) {
-    try {
-      viewerHasHype = (await getTrustStats(profile.userId, viewerId)).viewerHasHype;
-    } catch (error) {
-      logServerError("profile.page.viewerHype", error, { userId: viewerId });
-    }
+  if (hypeResult.status === "fulfilled") {
+    viewerHasHype = hypeResult.value;
+  } else {
+    logServerError("profile.page.viewerHype", hypeResult.reason, { userId: viewerId });
   }
 
   return (
@@ -248,4 +271,10 @@ function ProfileLoadError({ username }: { username: string }) {
       />
     </PageContainer>
   );
+}
+
+export const dynamicParams = false;
+
+export function generateStaticParams() {
+  return [{ username: "demo" }];
 }

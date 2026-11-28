@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { toggleTrustHypeAction } from "@/app/actions/trust";
-import { initialActionState } from "@/app/actions/settings-types";
+import { toggleTrustHypeAction } from "@/lib/static/actions";
+import { initialActionState } from "@/lib/static/actions";
 import { PremiumButton } from "@/components/ui/premium-button";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";

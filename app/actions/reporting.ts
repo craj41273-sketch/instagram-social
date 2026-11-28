@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import type { ReportActionState } from "@/app/actions/reporting-types";
-import { requireProfile } from "@/lib/auth/dal";
+import { getActiveProfile, requireProfile } from "@/lib/auth/dal";
 import { toSafeMessage } from "@/lib/errors";
 import { logServerError } from "@/lib/logging";
 import { createAppeal, createReport } from "@/lib/reporting/service";
@@ -28,7 +28,10 @@ export async function createReportAction(
   _state: ReportActionState,
   formData: FormData,
 ): Promise<ReportActionState> {
-  const current = await requireProfile();
+  const current = await getActiveProfile();
+  if (!current) {
+    return { status: "error", message: "Your account cannot perform this action." };
+  }
   const userId = current.user.id;
 
   if (!consumeRateLimit(`report:create:${userId}`, 5, 10 * 60_000).allowed) {

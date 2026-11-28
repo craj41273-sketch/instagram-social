@@ -27,11 +27,7 @@ import {
   buildSetStoryReactionStatement,
 } from "@/lib/db/story-sql";
 import { parseUserId } from "@/lib/db/profile-sql";
-import {
-  canReactToStory,
-  canReplyToStory,
-  getPrivacyContext,
-} from "@/lib/privacy/service";
+import { canReactToStory, getPrivacyContext } from "@/lib/privacy/service";
 import { DatabaseError, ValidationError } from "@/lib/errors";
 import { logServerError } from "@/lib/logging";
 
@@ -401,8 +397,6 @@ export async function recordStoryView(
   validateIds(storyId, viewerId);
   const ownerId = await getVisibleStoryOwner(storyId, viewerId);
   if (!ownerId || ownerId === viewerId) return false;
-  const context = await getPrivacyContext(viewerId, ownerId);
-  if (!canReplyToStory(context)) return false;
 
   try {
     const result = await getDb().execute(

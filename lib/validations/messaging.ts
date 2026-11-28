@@ -36,5 +36,10 @@ export const inboxPageQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(MAX_INBOX_PAGE_SIZE).default(12),
 });
 
+export const conversationRequestActionSchema = z
+  .object({ action: z.enum(["accept", "decline"]) })
+  .strict();
+
 export type SendMessageInput = z.infer<typeof sendMessageSchema>;
 export type ConversationStartInput = z.infer<typeof conversationStartSchema>;
+export type ConversationRequestActionInput = z.infer<typeof conversationRequestActionSchema>;

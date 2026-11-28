@@ -8,8 +8,8 @@ import {
   deleteLinkAction,
   reorderLinksAction,
   updateLinkAction,
-} from "@/app/actions/professional";
-import { initialActionState, type ActionState } from "@/app/actions/settings-types";
+} from "@/lib/static/actions";
+import { initialActionState, type ActionState } from "@/lib/static/actions";
 import { ActionFeedback } from "@/components/settings/action-feedback";
 import { FormField } from "@/components/shared/form-field";
 import { Button } from "@/components/ui/button";

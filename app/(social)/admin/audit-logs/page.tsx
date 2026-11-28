@@ -10,13 +10,9 @@ export const metadata: Metadata = {
   description: "Sanitized staff action history with actor, entity, and time.",
 };
 
-interface AuditLogsPageProps {
-  searchParams: Promise<{ page?: string }>;
-}
-
-export default async function AdminAuditLogsPage({ searchParams }: AuditLogsPageProps) {
+export default async function AdminAuditLogsPage() {
   await requireStaffPage();
-  const raw = await searchParams;
+  const raw: Record<string, string | undefined> = {};
   const parsed = z.coerce.number().int().min(1).max(10_000).safeParse(raw.page ?? "1");
   const page = parsed.success ? parsed.data : 1;
 

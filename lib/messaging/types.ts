@@ -17,6 +17,8 @@ export interface InboxItem {
   lastMessagePreview: string;
   lastMessageDeleted: boolean;
   unreadCount: number;
+  requestStatus: "none" | "pending" | "accepted" | "declined";
+  canRespondToRequest: boolean;
 }
 
 export interface InboxPage {

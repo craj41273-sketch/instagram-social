@@ -6,7 +6,7 @@ import { useFormStatus } from "react-dom";
 import {
   createCommentAction,
   deleteCommentAction,
-} from "@/app/actions/engagement";
+} from "@/lib/static/actions";
 import { PremiumButton } from "@/components/ui/premium-button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";

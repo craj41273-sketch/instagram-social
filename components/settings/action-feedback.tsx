@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useToast } from "@/components/ui/toast";
-import type { ActionState } from "@/app/actions/settings-types";
+import type { ActionState } from "@/lib/static/actions";
 
 /** Inline error plus one toast per completed settings action. */
 export function ActionFeedback({ state }: { state: ActionState }) {

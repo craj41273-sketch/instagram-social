@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getCurrentProfile } from "@/lib/auth/dal";
+import { getActiveProfile } from "@/lib/auth/dal";
 import {
   deleteOwnedStory,
   recordStoryView,
@@ -30,7 +30,7 @@ import {
 
 async function currentViewerId(): Promise<string | null> {
   try {
-    const current = await getCurrentProfile();
+    const current = await getActiveProfile();
     return current?.user.id ?? null;
   } catch (error) {
     logServerError("stories.action.identity", error);
@@ -116,7 +116,7 @@ export async function deleteStoryAction(storyId: string): Promise<StoryActionSta
     return { status: "error", message: "That story could not be found." };
   }
 
-  const current = await getCurrentProfile().catch((error) => {
+  const current = await getActiveProfile().catch((error) => {
     logServerError("stories.action.deleteIdentity", error);
     return null;
   });

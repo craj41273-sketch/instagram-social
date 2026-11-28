@@ -7,7 +7,7 @@ const tiles = Array.from({ length: 10 }, (_, index) => index);
 /** Matches the explore header, category chips, and photo grid layout. */
 export default function ExploreLoading() {
   return (
-    <PageContainer className="max-w-6xl space-y-10">
+    <PageContainer className="max-w-6xl space-y-10" aria-hidden="true">
       <div className="space-y-4">
         <SkeletonLine className="h-4 w-32" />
         <SkeletonLine className="h-9 w-72 max-w-full" />

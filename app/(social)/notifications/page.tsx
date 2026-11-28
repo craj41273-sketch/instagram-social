@@ -15,13 +15,9 @@ export const metadata: Metadata = {
   description: "Real activity from people you follow and conversations you share.",
 };
 
-interface NotificationsPageProps {
-  searchParams: Promise<{ cursor?: string; limit?: string }>;
-}
-
-export default async function NotificationsPage({ searchParams }: NotificationsPageProps) {
+export default async function NotificationsPage() {
   const current = await requireProfile();
-  const parsed = notificationPageQuerySchema.safeParse(await searchParams);
+  const parsed = notificationPageQuerySchema.safeParse({});
   const query = parsed.success ? parsed.data : { limit: NOTIFICATION_PAGE_SIZE };
 
   let page;

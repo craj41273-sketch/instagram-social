@@ -3,7 +3,7 @@
 import { useState, useTransition, useOptimistic } from "react";
 import Link from "next/link";
 import { Check } from "lucide-react";
-import { followAction } from "@/app/actions/follows";
+import { followAction } from "@/lib/static/actions";
 import {
   initialFollowActionState,
   type FollowActionState,

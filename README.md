@@ -43,7 +43,7 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Open <http://localhost:3000>. Every route — the landing page, design system, auth pages, and policy placeholders — renders without any external service configured. Environment variables are only read lazily when a data/auth module is actually used.
+Open <http://localhost:3000>. Every route — the landing page, design system, auth pages, and policy placeholders — renders without any external service configured. Environment variables are only read lazily when a data/auth module is actually used. `npm run build` writes a GitHub Pages-ready static export to `out/`; see [GitHub Pages hosting](#github-pages-hosting).
 
 ## Routes
 
@@ -81,13 +81,25 @@ Open <http://localhost:3000>. Every route — the landing page, design system, a
 
 > **Platform note:** `dev` and `build` deliberately pass `--webpack`. This project was initialized on Android/arm64, where Turbopack native bindings are unavailable. On a supported machine you may remove the flag.
 
+## GitHub Pages hosting
+
+GitHub Pages is the permanent and only website host. The project site is published at <https://craj41273-sketch.github.io/instagram-social/>.
+
+- `next.config.ts` sets `output: "export"`, `basePath: "/instagram-social"`, `trailingSlash: true`, and unoptimized images. No `assetPrefix` is needed: generated CSS/JS/font references already use `/instagram-social/`.
+- `npm run build` writes the deployable site to `out/` (including `index.html`, `404.html`, and `.nojekyll`). `.github/workflows/pages.yml` uploads only `out/` on pushes to `main` or manual dispatch, after `npm run check` and `npm test`.
+- Dynamic routes are prebuilt for a `demo` parameter with `dynamicParams = false`. Static hosting cannot resolve arbitrary profile/post/story IDs; direct links to unknown IDs return the 404 page.
+- API routes, Server Actions, `proxy.ts`, `cookies()`, `headers()`, and server `searchParams` cannot run on Pages. Their Node source is preserved but excluded from the static graph via `pageExtensions`; browser imports use `lib/static/actions.ts`, which rejects mutations loudly instead of faking success.
+- Sign-out uses the Supabase browser client and works with `NEXT_PUBLIC_*` values supplied at build time. Sign-up, login, password recovery, email confirmation, and OAuth callbacks still depend on Node Server Actions/route handlers (and Neon profile provisioning), so their UI is preserved but submission fails loudly on Pages — no simulated success. If a trusted backend is added, register the Pages URL in Supabase allowed redirect URLs. Never put `DATABASE_URL` or `SUPABASE_SERVICE_ROLE_KEY` in `NEXT_PUBLIC_*` variables or in `out/`.
+- Neon-backed reads/writes, Storage uploads, Realtime publishing, DMs, notifications, moderation persistence, reports/appeals, and admin data are **unavailable on the static site**. Their UI is preserved as static shells; restoring them needs a trusted backend with RLS/ownership checks. See [`docs/BLOCK_12_REPORT.md`](docs/BLOCK_12_REPORT.md).
+- Redeploy by pushing to `main` or running the `Deploy Luma to GitHub Pages` workflow manually. Validate locally with `npm run check && npm test && npm run build`.
+
 ## Scripts
 
 | Command | Purpose |
 | --- | --- |
 | `npm run dev` | Start the development server |
-| `npm run build` | Production build |
-| `npm run start` | Serve a production build |
+| `npm run build` | Static export to `out/` (GitHub Pages artifact) |
+| `npm run start` | Serve a Node build locally (not used by Pages) |
 | `npm run lint` | Run ESLint |
 | `npm run typecheck` | Run `tsc --noEmit` |
 | `npm run check` | Typecheck and lint |
@@ -119,7 +131,7 @@ app/api/stories       Authenticated multipart story upload endpoint
 app/api/users/search  Authenticated username lookup foundation
 app/auth/             Supabase callback and OTP confirmation handlers
 app/                  Root providers, global styles, error/loading/not-found
-proxy.ts              Next.js 16 session refresh and auth-only redirects
+proxy.ts              Next.js 16 session refresh, redirects, and baseline security headers
 components/landing/   Nav, hero composition, feature rows, illustrative visuals
 components/auth/      Auth shell, wrappers, fields, and client form logic
 components/ui/        shadcn/ui primitives + app-wide wrappers
@@ -206,6 +218,23 @@ public/               Static assets
 - **Migration:** `drizzle/0008_chubby_the_call.sql` is additive and reviewed but **not applied** from this environment. It widens one notification CHECK to include safety notices and adds columns/tables/constraints without deleting data; apply `0004`–`0008` in order when Neon credentials are available.
 - **Tests:** 76 passing structural tests cover Block 11A schema, additive migration, the exact trust formula, validation, and separation of trust/risk/reporting inputs. Real Neon/Supabase flows and browser screenshots at 320/375/430/768/1024/1440 px were not run without credentials or browser automation.
 
+## Block 11B behavior
+
+- **Active-account boundary:** `isActiveUser()`/`getActiveProfile()` block writes and mutation APIs for banned/suspended accounts while leaving read-only self views and `/appeals` reachable. Suspend/ban/restore additionally require an admin, and all staff authority is rechecked from the session plus Neon role.
+- **Message requests:** pending requests stay in a safe inbox card with placeholder preview and Accept/Decline; recipients cannot open or mark pending/declined threads read, senders lose declined threads, and message notices are suppressed while a request is unresolved. Global unread badges exclude inaccessible threads.
+- **Privacy enforcement:** people-search bios are gated by `profileInfoVisibility` or a follow edge, hidden words mask inbox previews, counts are capped at 100, story views no longer require reply permission, and banned accounts are excluded from follow lists/counts.
+- **Recovery and headers:** password reset requires a recovery token and consumes a bounded token-prefix budget. Every proxy response gets baseline security headers and a **report-only** CSP; enforced CSP is not claimed because Next.js and the theme script need inline code.
+- **UI/performance:** notification and inbox refresh merge into loaded pages instead of resetting pagination; mobile links have larger touch targets and a secondary-links disclosure; settings navigation is bounded on small screens; above-fold tiles request image priority; the story viewer traps focus and locks body scroll; independent server reads are batched.
+- **CI/config:** the broken GitHub Pages workflow was removed and replaced with validation-only CI (`npm ci`, `npm run check`, `npm test`, `npm run build`). Block 12 replaces the deploy step with a static-export Pages workflow; no other host was introduced.
+- **Limits:** rate limiting is still per-process, not distributed. Screenshot/screen-recording controls remain web-level deterrence only and cannot prevent OS capture. Migration `0008` remains unapplied; see `docs/BLOCK_11B_REPORT.md` for its residual risks.
+
+## Block 12 behavior
+
+- **Static host only:** `out/` is the deployable artifact; no Vercel, Netlify, Cloudflare Pages, VPS, or other app host is configured. `basePath` is `/instagram-social` and `assetPrefix` is intentionally absent.
+- **Preserved UI:** landing, design system, auth, policy, feed, explore, search, profile/post/story/message/notification, settings, reporting, and admin shells are prerendered. Dynamic detail routes are prebuilt with a `demo` param and a custom `404.html`.
+- **Backend boundary:** Supabase browser auth/session flows can run with public env at build time. Neon Drizzle queries, Server Actions, API routes, proxy headers, Storage uploads, Realtime, and all persistence-backed features are documented as unavailable, not simulated.
+- **Validation:** `npm run check`, `npm test` (94 tests, 90 pass, 4 expected integration skips), and `npm run build` pass locally; exported assets use `/instagram-social/` paths and contain no server credentials. Live deployment status is recorded in `docs/BLOCK_12_REPORT.md`.
+
 ## Current status
 
 - [x] Next.js App Router + TypeScript strict mode
@@ -243,4 +272,8 @@ public/               Static assets
 - [x] Authenticated hypes, exact community trust formula, and independent admin-only risk state (Block 11A)
 - [x] Reports, bounded chat evidence snapshots, appeals, and audited authorized access (Block 11A)
 - [x] Staff-only admin dashboard, moderation, audit logs, and real metrics (Block 11A)
+- [x] Shared active-account mutation guard, request enforcement, redacted logging, report-only CSP, and validation-only CI (Block 11B)
+- [x] 90 structural/unit tests with typecheck, lint, and build verified locally (Block 11B)
+- [x] GitHub Pages static export, base path, 404 page, and deploy workflow (Block 12)
+- [x] 94 structural/unit tests with typecheck, lint, and static build verified locally (Block 12)
 - [ ] Save state and recommendations (later blocks)

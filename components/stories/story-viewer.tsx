@@ -16,7 +16,7 @@ import {
   deleteStoryAction,
   recordStoryViewAction,
   storyReactionAction,
-} from "@/app/actions/stories";
+} from "@/lib/static/actions";
 import {
   STORY_DISPLAY_MS,
   STORY_REACTIONS,
@@ -77,6 +77,7 @@ export function StoryViewer({ groups, initialUserId }: StoryViewerProps) {
   const [deleting, setDeleting] = useState(false);
   const [reactions, setReactions] = useState(() => initialReactions(groups));
   const viewedRef = useRef<Set<string>>(new Set());
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   const group = groups[groupIndex];
   const story: StoryItem | undefined = group?.stories[storyIndex];
@@ -124,6 +125,17 @@ export function StoryViewer({ groups, initialUserId }: StoryViewerProps) {
   }, [groupIndex, groups, resetProgress, storyIndex]);
 
   useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    dialogRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      previouslyFocused?.focus();
+    };
+  }, []);
+
+  useEffect(() => {
     const onVisibility = () => setHidden(document.hidden);
     onVisibility();
     document.addEventListener("visibilitychange", onVisibility);
@@ -143,6 +155,30 @@ export function StoryViewer({ groups, initialUserId }: StoryViewerProps) {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Tab") {
+        const dialog = dialogRef.current;
+        if (!dialog) return;
+        const focusable = Array.from(
+          dialog.querySelectorAll<HTMLElement>(
+            "a[href], button:not([disabled]), [tabindex]:not([tabindex='-1'])",
+          ),
+        ).filter((element) => element.getClientRects().length > 0);
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        const active = document.activeElement;
+        if (!first || !last || active === dialog || !dialog.contains(active)) {
+          event.preventDefault();
+          if (event.shiftKey) (last ?? dialog).focus();
+          else first?.focus();
+        } else if (event.shiftKey && active === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && active === last) {
+          event.preventDefault();
+          first.focus();
+        }
+        return;
+      }
       if (event.key === "Escape") {
         event.preventDefault();
         close();
@@ -226,7 +262,14 @@ export function StoryViewer({ groups, initialUserId }: StoryViewerProps) {
 
   if (!group || !story) {
     return (
-      <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black p-6 text-white">
+      <div
+        ref={dialogRef}
+        tabIndex={-1}
+        className="fixed inset-0 z-[70] flex items-center justify-center bg-black p-6 text-white"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Story unavailable"
+      >
         <div className="space-y-4 text-center">
           <p className="text-sm text-white/70">This story is no longer available.</p>
           <Button variant="secondary" onClick={close}>
@@ -239,6 +282,8 @@ export function StoryViewer({ groups, initialUserId }: StoryViewerProps) {
 
   return (
     <div
+      ref={dialogRef}
+      tabIndex={-1}
       className="fixed inset-0 z-[70] flex items-center justify-center bg-black text-white"
       role="dialog"
       aria-modal="true"

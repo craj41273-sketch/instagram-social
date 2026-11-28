@@ -21,19 +21,15 @@ export const metadata: Metadata = {
 
 interface ConversationPageProps {
   params: Promise<{ conversationId: string }>;
-  searchParams: Promise<{ cursor?: string; limit?: string }>;
 }
 
-export default async function ConversationPage({
-  params,
-  searchParams,
-}: ConversationPageProps) {
+export default async function ConversationPage({ params }: ConversationPageProps) {
   const current = await requireProfile();
   const rawId = (await params).conversationId;
   const conversationId = parseUserId(rawId);
   if (!conversationId) notFound();
 
-  const parsed = messagePageQuerySchema.safeParse(await searchParams);
+  const parsed = messagePageQuerySchema.safeParse({});
   const query = parsed.success ? parsed.data : { limit: 20 };
 
   let header;
@@ -69,4 +65,10 @@ export default async function ConversationPage({
       />
     </PageContainer>
   );
+}
+
+export const dynamicParams = false;
+
+export function generateStaticParams() {
+  return [{ conversationId: "demo" }];
 }

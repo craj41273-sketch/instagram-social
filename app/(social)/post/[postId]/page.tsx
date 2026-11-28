@@ -15,7 +15,6 @@ import { commentPageQuerySchema } from "@/lib/validations/post";
 
 interface PostPageProps {
   params: Promise<{ postId: string }>;
-  searchParams: Promise<{ cursor?: string }>;
 }
 
 export async function generateMetadata({ params }: PostPageProps): Promise<Metadata> {
@@ -28,9 +27,9 @@ export async function generateMetadata({ params }: PostPageProps): Promise<Metad
 }
 
 /** Post detail with DB-derived like state and paginated, owner-managed comments. */
-export default async function PostPage({ params, searchParams }: PostPageProps) {
+export default async function PostPage({ params }: PostPageProps) {
   const { postId } = await params;
-  const parsedQuery = commentPageQuerySchema.safeParse(await searchParams);
+  const parsedQuery = commentPageQuerySchema.safeParse({});
   const query = parsedQuery.success
     ? parsedQuery.data
     : { cursor: undefined, limit: 12 };
@@ -90,4 +89,10 @@ export default async function PostPage({ params, searchParams }: PostPageProps) 
       />
     </PageContainer>
   );
+}
+
+export const dynamicParams = false;
+
+export function generateStaticParams() {
+  return [{ postId: "demo" }];
 }

@@ -5,8 +5,8 @@ import { useFormStatus } from "react-dom";
 import {
   removeRiskAssessmentAction,
   setRiskAssessmentAction,
-} from "@/app/actions/admin";
-import { initialActionState, type ActionState } from "@/app/actions/settings-types";
+} from "@/lib/static/actions";
+import { initialActionState, type ActionState } from "@/lib/static/actions";
 import { ActionFeedback } from "@/components/settings/action-feedback";
 import { FormField } from "@/components/shared/form-field";
 import { PremiumButton } from "@/components/ui/premium-button";

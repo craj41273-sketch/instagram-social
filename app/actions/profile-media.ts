@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getCurrentProfile } from "@/lib/auth/dal";
+import { getActiveProfile } from "@/lib/auth/dal";
 import { updateProfileImage } from "@/lib/db/profiles";
 import { toSafeMessage } from "@/lib/errors";
 import { logServerError } from "@/lib/logging";
@@ -35,7 +35,7 @@ export async function uploadProfileMediaAction(
 
   let current;
   try {
-    current = await getCurrentProfile();
+    current = await getActiveProfile();
   } catch (error) {
     logServerError("profileMedia.identity", error);
     return { status: "error", message: "We could not verify your account. Please try again." };

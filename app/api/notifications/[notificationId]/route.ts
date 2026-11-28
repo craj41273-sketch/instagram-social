@@ -1,6 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
 import { getApiProfile } from "@/lib/api/identity";
+import { isActiveUser } from "@/lib/auth/dal";
 import { markNotificationRead } from "@/lib/db/notifications";
 import { toSafeMessage } from "@/lib/errors";
 import { logServerError } from "@/lib/logging";
@@ -28,6 +29,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   const current = await getApiProfile("notifications.read.identity");
   if (!current) {
     return NextResponse.json({ error: "Sign in to manage notifications." }, { status: 401 });
+  }
+  if (!isActiveUser(current.user)) {
+    return NextResponse.json(
+      { error: "Your account cannot perform this action." },
+      { status: 403 },
+    );
   }
 
   if (

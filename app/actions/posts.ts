@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getCurrentProfile } from "@/lib/auth/dal";
+import { getActiveProfile } from "@/lib/auth/dal";
 import {
   deleteOwnPost,
   updateOwnPost,
@@ -24,7 +24,7 @@ function formText(formData: FormData, key: string): string {
 
 async function sessionIdentity(scope: string) {
   try {
-    const current = await getCurrentProfile();
+    const current = await getActiveProfile();
     if (!current) {
       return { error: { status: "error" as const, message: "Sign in to manage posts." } };
     }

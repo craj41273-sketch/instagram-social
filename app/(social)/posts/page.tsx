@@ -22,13 +22,9 @@ export const metadata: Metadata = {
   description: "A real, photo-first feed of posts published on Luma.",
 };
 
-interface PostsPageProps {
-  searchParams: Promise<{ cursor?: string; limit?: string; tag?: string }>;
-}
-
 /** Authenticated self/following feed; anonymous visitors keep the public feed. */
-export default async function PostsPage({ searchParams }: PostsPageProps) {
-  const parsedQuery = postFeedQuerySchema.safeParse(await searchParams);
+export default async function PostsPage() {
+  const parsedQuery = postFeedQuerySchema.safeParse({});
   const query = parsedQuery.success
     ? parsedQuery.data
     : { limit: 12, cursor: undefined, tag: undefined };
@@ -40,33 +36,38 @@ export default async function PostsPage({ searchParams }: PostsPageProps) {
     logServerError("posts.page.viewer", error);
   }
 
-  let storyGroups: Awaited<ReturnType<typeof listStoryGroups>> = [];
-  if (viewer) {
-    try {
-      storyGroups = await listStoryGroups({ viewerUserId: viewer.user.id });
-    } catch (error) {
-      logServerError("posts.page.stories", error);
-    }
-  }
-
-  let page = null;
-  let failed = false;
-  try {
-    page = viewer
-      ? await listFeedPosts({
+  const [storiesResult, feedResult] = await Promise.allSettled([
+    viewer
+      ? listStoryGroups({ viewerUserId: viewer.user.id })
+      : Promise.resolve<Awaited<ReturnType<typeof listStoryGroups>>>([]),
+    viewer
+      ? listFeedPosts({
           viewerUserId: viewer.user.id,
           limit: query.limit,
           cursor: query.cursor,
           tag: query.tag,
         })
-      : await listRecentPosts({
+      : listRecentPosts({
           limit: query.limit,
           cursor: query.cursor,
           tag: query.tag,
           viewerUserId: null,
-        });
-  } catch (error) {
-    logServerError("posts.page.feed", error, { tagLength: query.tag?.length ?? 0 });
+        }),
+  ]);
+
+  let storyGroups: Awaited<ReturnType<typeof listStoryGroups>> = [];
+  if (storiesResult.status === "fulfilled") {
+    storyGroups = storiesResult.value;
+  } else {
+    logServerError("posts.page.stories", storiesResult.reason);
+  }
+
+  let page = null;
+  let failed = false;
+  if (feedResult.status === "fulfilled") {
+    page = feedResult.value;
+  } else {
+    logServerError("posts.page.feed", feedResult.reason, { tagLength: query.tag?.length ?? 0 });
     failed = true;
   }
 

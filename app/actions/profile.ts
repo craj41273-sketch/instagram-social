@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getCurrentProfile } from "@/lib/auth/dal";
+import { getActiveProfile } from "@/lib/auth/dal";
 import type { ProfileActionState } from "@/lib/profile/action-state";
 import {
   isUsernameAvailableForUser,
@@ -33,7 +33,7 @@ export async function updateProfileAction(
 ): Promise<ProfileActionState> {
   let current;
   try {
-    current = await getCurrentProfile();
+    current = await getActiveProfile();
   } catch (error) {
     logServerError("profile.updateIdentity", error);
     return { status: "error", message: "We could not verify your account. Please try again." };

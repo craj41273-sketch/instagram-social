@@ -2,8 +2,8 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { updateReportAction } from "@/app/actions/admin";
-import { initialActionState, type ActionState } from "@/app/actions/settings-types";
+import { updateReportAction } from "@/lib/static/actions";
+import { initialActionState, type ActionState } from "@/lib/static/actions";
 import { AdminStatusBadge, PriorityBadge } from "@/components/admin/admin-badges";
 import { ActionFeedback } from "@/components/settings/action-feedback";
 import { FormField } from "@/components/shared/form-field";

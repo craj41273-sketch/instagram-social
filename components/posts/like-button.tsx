@@ -3,7 +3,7 @@
 import { useId, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { Heart } from "lucide-react";
-import { likePostAction, unlikePostAction } from "@/app/actions/engagement";
+import { likePostAction, unlikePostAction } from "@/lib/static/actions";
 import { PremiumButton } from "@/components/ui/premium-button";
 import {
   initialLikeActionState,

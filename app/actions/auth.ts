@@ -320,11 +320,18 @@ export async function resetPasswordAction(
   _state: AuthActionState<ResetPasswordValues>,
   formData: FormData,
 ): Promise<AuthActionState<ResetPasswordValues>> {
-  const token = formText(formData, "token");
+  const token = formText(formData, "token").trim();
+  if (!token) {
+    return {
+      status: "error",
+      message: "Open the recovery link from your email to set a new password.",
+    };
+  }
+
   const parsed = resetPasswordActionSchema.safeParse({
     password: formText(formData, "password"),
     confirmPassword: formText(formData, "confirmPassword"),
-    token: token.length > 0 ? token : undefined,
+    token,
   });
 
   if (!parsed.success) {
@@ -333,6 +340,11 @@ export async function resetPasswordAction(
       message: "Please correct the highlighted fields.",
       errors: toFormErrors<ResetPasswordValues>(parsed.error),
     };
+  }
+
+  // The token is the only stable identifier available before it is exchanged.
+  if (isRateLimited(`reset:${token.slice(0, 64)}`, 5, 10 * 60_000)) {
+    return { status: "error", message: RATE_LIMIT_MESSAGE };
   }
 
   let supabase;
@@ -346,17 +358,15 @@ export async function resetPasswordAction(
     };
   }
 
-  if (parsed.data.token) {
-    const exchange = await supabase.auth.exchangeCodeForSession(parsed.data.token);
-    if (exchange.error) {
-      const otp = await supabase.auth.verifyOtp({
-        token_hash: parsed.data.token,
-        type: "recovery",
-      });
-      if (otp.error) {
-        logServerError("auth.resetToken", otp.error);
-        return { status: "error", message: mapAuthError(otp.error, "reset") };
-      }
+  const exchange = await supabase.auth.exchangeCodeForSession(token);
+  if (exchange.error) {
+    const otp = await supabase.auth.verifyOtp({
+      token_hash: token,
+      type: "recovery",
+    });
+    if (otp.error) {
+      logServerError("auth.resetToken", otp.error);
+      return { status: "error", message: mapAuthError(otp.error, "reset") };
     }
   }
 

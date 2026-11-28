@@ -4,7 +4,7 @@ import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import Link from "next/link";
 import { CircleCheck } from "lucide-react";
-import { updateProfileAction } from "@/app/actions/profile";
+import { updateProfileAction } from "@/lib/static/actions";
 import { FormField } from "@/components/shared/form-field";
 import { PremiumButton } from "@/components/ui/premium-button";
 import { Spinner } from "@/components/ui/spinner";

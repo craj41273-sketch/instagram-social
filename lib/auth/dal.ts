@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/auth/server";
+import { isActiveUser } from "@/lib/auth/account-status";
 import { LOGIN_ROUTE } from "@/lib/auth/constants";
 import { getAppUserWithProfile } from "@/lib/db/users";
 import { logServerError } from "@/lib/logging";
@@ -51,6 +52,17 @@ export interface CurrentProfile {
   user: User;
   profile: Profile;
 }
+
+export { isActiveUser } from "@/lib/auth/account-status";
+
+/** Mutation identity: inactive accounts are treated as unauthenticated here. */
+export const getActiveProfile = cache(
+  async (): Promise<CurrentProfile | null> => {
+    const current = await getCurrentProfile();
+    if (!current || !isActiveUser(current.user)) return null;
+    return current;
+  },
+);
 
 /** Looks up the Neon user/profile pair for the server-derived identity. */
 export const getCurrentProfile = cache(

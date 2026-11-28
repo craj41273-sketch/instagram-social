@@ -3,6 +3,7 @@
  * tokens, or SQL details, so context values are redacted before logging.
  */
 import "server-only";
+import { createHash } from "node:crypto";
 
 const REDACT_KEY = /password|secret|token|key|url|cookie|credential|authorization/i;
 
@@ -22,27 +23,29 @@ function redact(context: LogContext): LogContext {
   return safe;
 }
 
-/** Logs a server error with useful metadata and no credentials or stack traces. */
+/** Stable, non-reversible handle for correlating a message without logging it. */
+function reference(message: string): string {
+  return createHash("sha256").update(message).digest("hex").slice(0, 12);
+}
+
+/** Logs a server error name with useful metadata and no raw error text. */
 export function logServerError(
   scope: string,
   error: unknown,
   context: LogContext = {},
 ): void {
-  const description =
-    error instanceof Error
-      ? { name: error.name, message: error.message.slice(0, 300) }
-      : { message: String(error).slice(0, 300) };
+  const name = error instanceof Error ? error.name : "UnknownError";
 
   console.error(
     `[luma:${scope}]`,
-    JSON.stringify({ ...description, ...redact(context) }),
+    JSON.stringify({ name, ...redact(context) }),
   );
 }
 
-/** Logs a non-exception condition that should be visible in development. */
+/** Logs a non-exception condition by reference, never its raw message. */
 export function logServerWarning(scope: string, message: string, context: LogContext = {}): void {
   console.warn(
     `[luma:${scope}]`,
-    JSON.stringify({ message: message.slice(0, 300), ...redact(context) }),
+    JSON.stringify({ reference: reference(message), ...redact(context) }),
   );
 }

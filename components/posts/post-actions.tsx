@@ -5,7 +5,7 @@ import { useFormStatus } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Flag, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
-import { deletePostAction, updatePostAction } from "@/app/actions/posts";
+import { deletePostAction, updatePostAction } from "@/lib/static/actions";
 import { PremiumButton } from "@/components/ui/premium-button";
 import {
   Dialog,

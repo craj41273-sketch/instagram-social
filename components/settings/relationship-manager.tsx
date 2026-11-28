@@ -2,8 +2,8 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { setRelationshipAction } from "@/app/actions/privacy";
-import { initialActionState, type ActionState } from "@/app/actions/settings-types";
+import { setRelationshipAction } from "@/lib/static/actions";
+import { initialActionState, type ActionState } from "@/lib/static/actions";
 import { ActionFeedback } from "@/components/settings/action-feedback";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { FormField } from "@/components/shared/form-field";

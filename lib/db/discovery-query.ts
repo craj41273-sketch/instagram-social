@@ -55,6 +55,26 @@ export function buildDiscoverableUserCondition(viewerUserId: string | null): SQL
   `;
 }
 
+/** Bio text stays private unless the setting is public or the viewer follows. */
+export function buildProfileInfoVisibilityCondition(viewerUserId: string | null): SQL {
+  return sql`
+    (
+      coalesce((
+        select settings.profile_info_visibility
+        from ${profilePrivacySettings} settings
+        where settings.user_id = ${users.id}
+      ), 'everyone') = 'everyone'
+      or (
+        ${viewerUserId} is not null
+        and exists (
+          select 1 from ${follows} f
+          where f.follower_id = ${viewerUserId} and f.following_id = ${users.id}
+        )
+      )
+    )
+  `;
+}
+
 /** Real suggestions exclude self and any existing follow edge. */
 export function buildSuggestedUsersCondition(viewerUserId: string): SQL {
   return sql`${users.id} <> ${viewerUserId}

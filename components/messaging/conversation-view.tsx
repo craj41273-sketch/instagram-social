@@ -6,7 +6,6 @@ import { ArrowLeft, SendHorizontal } from "lucide-react";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { ReportLink } from "@/components/reporting/report-link";
 import { EmptyState } from "@/components/shared/empty-state";
-import { SensitiveSurface } from "@/components/shared/sensitive-surface";
 import { ErrorState } from "@/components/shared/error-state";
 import { PremiumButton } from "@/components/ui/premium-button";
 import { Spinner } from "@/components/ui/spinner";
@@ -169,7 +168,7 @@ export function ConversationView({
         <ErrorState title="Update failed" description={error} />
       ) : null}
 
-      <SensitiveSurface className="max-h-[60vh] min-h-64 overflow-y-auto rounded-2xl border border-border/60 bg-surface/40 p-4">
+      <div className="max-h-[60vh] min-h-64 overflow-y-auto rounded-2xl border border-border/60 bg-surface/40 p-4">
         <section aria-label="Conversation messages" className="space-y-3">
           {cursor ? (
             <div className="flex justify-center">
@@ -235,7 +234,7 @@ export function ConversationView({
           )}
           <div ref={bottomRef} aria-hidden="true" />
         </section>
-      </SensitiveSurface>
+      </div>
 
       <form
         className="space-y-2"

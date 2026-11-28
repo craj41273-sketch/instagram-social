@@ -2,13 +2,13 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { updatePrivacyAction } from "@/app/actions/privacy";
+import { updatePrivacyAction } from "@/lib/static/actions";
 import {
   initialActionState,
   PRIVACY_SCOPE_FIELDS,
   type PrivacyScope,
   type ActionState,
-} from "@/app/actions/settings-types";
+} from "@/lib/static/actions";
 import { ActionFeedback } from "@/components/settings/action-feedback";
 import { FormField } from "@/components/shared/form-field";
 import { PremiumButton } from "@/components/ui/premium-button";

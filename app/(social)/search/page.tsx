@@ -9,13 +9,8 @@ export const metadata: Metadata = {
   description: "Find Luma people and posts by username, display name, or caption.",
 };
 
-interface SearchRouteProps {
-  searchParams: Promise<{ q?: string }>;
-}
-
-export default async function SearchRoute({ searchParams }: SearchRouteProps) {
-  const params = await searchParams;
-  const initialQuery = typeof params.q === "string" ? params.q.trim().slice(0, 50) : "";
+export default async function SearchRoute() {
+  const initialQuery = "";
 
   let viewer = null;
   try {

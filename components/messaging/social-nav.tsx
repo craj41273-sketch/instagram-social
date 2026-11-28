@@ -16,10 +16,11 @@ import { useUserRealtime } from "@/lib/realtime/client";
 interface SocialNavProps {
   userId: string | null;
   initialCounts: UnreadCounts;
+  isAdmin: boolean;
 }
 
 /** Shell navigation with DB-derived badges and one shared realtime subscription. */
-export function SocialNav({ userId, initialCounts }: SocialNavProps) {
+export function SocialNav({ userId, initialCounts, isAdmin }: SocialNavProps) {
   const [counts, setCounts] = useState<UnreadCounts>(initialCounts);
 
   const refresh = useCallback(async () => {
@@ -57,7 +58,6 @@ export function SocialNav({ userId, initialCounts }: SocialNavProps) {
       <NavLink href="/posts#stories" label="Stories" />
       <NavLink href="/explore" label="Explore" />
       <NavLink href="/search" label="Search" />
-      <NavLink href="/posts" label="Posts" />
       <NavLink
         href="/messages"
         label="Messages"
@@ -69,9 +69,22 @@ export function SocialNav({ userId, initialCounts }: SocialNavProps) {
         count={userId ? counts.notifications : 0}
       />
       <NavLink href="/settings" label="Settings" />
-      <NavLink href="/appeals" label="Appeals" />
-      <NavLink href="/admin" label="Admin" />
       <ThemeToggle />
+      <details className="w-full sm:hidden">
+        <summary className="inline-flex min-h-10 cursor-pointer items-center rounded-md px-1.5 py-2 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">
+          More links
+        </summary>
+        <div className="flex flex-wrap gap-x-1 gap-y-1 pt-1">
+          <NavLink href="/posts" label="Posts" />
+          <NavLink href="/appeals" label="Appeals" />
+          {isAdmin ? <NavLink href="/admin" label="Admin" /> : null}
+        </div>
+      </details>
+      <div className="hidden items-center gap-x-1 sm:flex sm:gap-x-3">
+        <NavLink href="/posts" label="Posts" />
+        <NavLink href="/appeals" label="Appeals" />
+        {isAdmin ? <NavLink href="/admin" label="Admin" /> : null}
+      </div>
     </nav>
   );
 }
@@ -91,7 +104,7 @@ function NavLink({
     <Link
       href={href}
       aria-label={labelWithCount}
-      className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs whitespace-nowrap text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring sm:px-2 sm:text-sm"
+      className="inline-flex min-h-10 items-center gap-1 rounded-md px-1.5 py-2 text-xs whitespace-nowrap text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring sm:min-h-0 sm:px-2 sm:py-1 sm:text-sm"
     >
       {label}
       {count > 0 ? (

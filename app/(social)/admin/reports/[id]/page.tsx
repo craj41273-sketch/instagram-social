@@ -161,3 +161,9 @@ export default async function ReportDetailPage({ params }: ReportDetailPageProps
     </div>
   );
 }
+
+export const dynamicParams = false;
+
+export function generateStaticParams() {
+  return [{ id: "demo" }];
+}

@@ -21,16 +21,12 @@ export const metadata: Metadata = {
   description: "Filter and review reports submitted by Luma members.",
 };
 
-interface ReportsPageProps {
-  searchParams: Promise<{ status?: string; category?: string; priority?: string; q?: string; page?: string }>;
-}
-
 const selectClass =
   "h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
-export default async function ReportsPage({ searchParams }: ReportsPageProps) {
+export default async function ReportsPage() {
   const staff = await requireStaffPage();
-  const parsed = reportQuerySchema.safeParse(await searchParams);
+  const parsed = reportQuerySchema.safeParse({});
   const query = parsed.success ? parsed.data : { page: 1 };
 
   let result;

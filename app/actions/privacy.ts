@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-import { getCurrentProfile } from "@/lib/auth/dal";
+import { getActiveProfile } from "@/lib/auth/dal";
 import { getDb } from "@/lib/db";
 import { getPublicProfileByUsername } from "@/lib/db/profiles";
 import { closeFriends } from "@/lib/db/schema";
@@ -61,7 +61,7 @@ function splitWords(value: string): string[] {
 }
 
 async function sessionIdentity(): Promise<{ id: string; username: string } | null> {
-  const current = await getCurrentProfile();
+  const current = await getActiveProfile();
   if (!current) return null;
   return { id: current.user.id, username: current.user.username };
 }

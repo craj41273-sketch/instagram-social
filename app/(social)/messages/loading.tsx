@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 
 export default function MessagesLoading() {
   return (
-    <PageContainer className="max-w-3xl space-y-6">
+    <PageContainer className="max-w-3xl space-y-6" aria-hidden="true">
       <div className="space-y-2">
         <Skeleton className="h-3 w-20" />
         <Skeleton className="h-8 w-40" />

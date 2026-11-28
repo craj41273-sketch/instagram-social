@@ -6,16 +6,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { requireProfile } from "@/lib/auth/dal";
 import { createReportSchema } from "@/lib/validations/reporting";
 
-interface ReportPageProps {
-  searchParams: Promise<{ targetType?: string; targetId?: string }>;
-}
-
 /** Authenticated report intake with an explicit privacy disclosure. */
-export default async function ReportPage({ searchParams }: ReportPageProps) {
+export default async function ReportPage() {
   await requireProfile();
   const parsed = createReportSchema
     .pick({ targetType: true, targetId: true })
-    .safeParse(await searchParams);
+    .safeParse({});
 
   return (
     <PageContainer className="max-w-3xl space-y-6">

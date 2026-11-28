@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
-import { getCurrentProfile } from "@/lib/auth/dal";
+import { getActiveProfile } from "@/lib/auth/dal";
 import { createStoryRecord } from "@/lib/db/stories";
 import { toSafeMessage } from "@/lib/errors";
 import { getSupabaseServerEnv } from "@/lib/env/server";
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
 
   let current;
   try {
-    current = await getCurrentProfile();
+    current = await getActiveProfile();
   } catch (cause) {
     logServerError("stories.create.identity", cause);
     return error("We could not verify your account. Please try again.", 401);

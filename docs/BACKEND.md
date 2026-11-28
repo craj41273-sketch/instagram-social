@@ -132,6 +132,14 @@ plus new tables/constraints. Apply them in order with `npm run db:migrate` after
 setting `DATABASE_URL`. Never run a destructive migration against a database
 with data without reviewing it first.
 
+Before applying `0008`, verify the whole sequence in a scratch database. Its
+residual risks are: it drops/re-adds `notifications_type_check`, NULL reporter
+IDs can bypass dedupe uniqueness, evidence rows cascade when a report is
+deleted, and `risk_assessments.user_id` uniqueness is redundant with the pair
+constraint. It is additive and does not delete application rows, but it has not
+been executed against Neon from this environment. Do not hand-edit it after
+application; use a later additive migration for those follow-ups.
+
 ## Identity mapping
 
 ```text
@@ -194,7 +202,9 @@ the app handles both cases.
 
 - `getCurrentUser()` — cached, server-verified Supabase user or `null`.
 - `requireAuthenticatedUser()` — redirects to `/login` when absent.
-- `getCurrentProfile()` — joins the server-derived identity to Neon.
+- `getCurrentProfile()` — joins the server-derived identity to Neon; unchanged for read-only/self/appeal paths.
+- `isActiveUser()` — pure guard that rejects `banned`, `suspended`, or `bannedAt` users.
+- `getActiveProfile()` — mutation identity; returns `null` for inactive accounts.
 - `requireProfile()` — fails closed for owner-only features such as `/profile/edit`.
 
 These are server-only and are not imported by client components. Proxy checks
@@ -206,8 +216,9 @@ are optimistic; server actions and the DAL perform the authoritative checks.
 - Server-derived identity only; no frontend user IDs or auth IDs trusted.
 - Parameterized Drizzle SQL; no string interpolation of user input.
 - Service-role key and Neon URL never sent to the browser.
-- Safe, curated error messages; raw SDK/database errors logged server-side.
+- Safe, curated error messages; server logs store error names/digests only, never raw messages.
 - Redirect destinations restricted to same-origin paths.
+- Block 11B adds baseline security headers and a **report-only** CSP on every proxy response. CSP allows inline Next/theme scripts and is telemetry, not enforcement.
 - In-process rate-limit preparation on auth, profile/follow/search, story,
   conversation/message, notification, report, and appeal endpoints. Replace with
   a shared store before multi-instance deployment.
@@ -230,6 +241,25 @@ are optimistic; server actions and the DAL perform the authoritative checks.
 - Professional category, hypes, reports, and risk never grant role, verification,
   or privilege. Report priority comes from category alone; volume never changes
   risk or triggers punishment. No moderation action deletes user content.
+- Block 11B mutation paths resolve identity through `getActiveProfile()`, so
+  banned/suspended users cannot write while `/appeals` and read-only self views
+  remain reachable. `suspend`, `ban`, and `restore` recheck `requireStaff(true)`.
+- Password recovery now requires a token and applies a token-prefix rate budget
+  before exchange. Message requests are enforced in conversation headers,
+  history, inbox, read marks, and notification publication; pending recipient
+  previews are masked and global unread counts exclude inaccessible threads.
+- People-search bios are gated by `profileInfoVisibility` or a follow edge,
+  inbox previews apply viewer hidden words, unread counts are capped at 100,
+  story views no longer require reply permission, and follow counts/lists
+  exclude banned accounts.
+
+## Deployment configuration
+
+GitHub Pages cannot run this app: it has no static export and needs Node for
+server actions, route handlers, Neon, Storage, and Realtime. The broken Pages
+workflow was removed. `.github/workflows/ci.yml` only validates (`npm ci`,
+`npm run check`, `npm test`, `npm run build`); deployment and migration launch
+belong to Block 12 on a Node-capable host.
 
 ## Realtime architecture
 
@@ -278,7 +308,10 @@ no new dependency was added. It covers validation, schema shape, identity
 input rejection, atomic/idempotent SQL generation, rate limiting, redirects,
 safe error mapping, social constraints, cursors, messaging idempotency and
 read state, notification dedupe/guards/navigation, Block 11A schema/trust
-formula/validation/separation, and migration safety. Real
+formula/validation/separation, migration safety, and Block 11B guards for
+active accounts, request access, bio visibility, preview masking, capped
+unread counts, headers/CSP, CI, and story view recording. The current run is
+90 tests / 86 pass / 4 expected skips / 0 fail. Real
 Neon integration tests are opt-in via `LUMA_DB_INTEGRATION=1` plus
 `DATABASE_URL` against an already-migrated test database and are skipped by
 default.

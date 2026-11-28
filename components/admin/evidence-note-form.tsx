@@ -2,8 +2,8 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { addEvidenceNoteAction } from "@/app/actions/admin";
-import { initialActionState, type ActionState } from "@/app/actions/settings-types";
+import { addEvidenceNoteAction } from "@/lib/static/actions";
+import { initialActionState, type ActionState } from "@/lib/static/actions";
 import { ActionFeedback } from "@/components/settings/action-feedback";
 import { FormField } from "@/components/shared/form-field";
 import { PremiumButton } from "@/components/ui/premium-button";

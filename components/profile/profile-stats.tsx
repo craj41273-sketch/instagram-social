@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ChevronRight, Grid3X3 } from "lucide-react";
-import { loadMoreFollowsAction } from "@/app/actions/social";
+import { loadMoreFollowsAction } from "@/lib/static/actions";
 import { UserList } from "@/components/profile/user-list";
 import { EmptyState } from "@/components/shared/empty-state";
 import { PremiumButton } from "@/components/ui/premium-button";

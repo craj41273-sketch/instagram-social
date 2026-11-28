@@ -171,21 +171,38 @@ Status legend: `[x]` complete, `[~]` in progress, `[ ]` planned.
 - [ ] Real Neon/Supabase privacy, report, evidence, risk, appeal, and admin lifecycle tests with credentials
 - [ ] Real browser visual checks at 320/375/430/768/1024/1440 px (no browser automation available here)
 
-> Migration `0008` is additive and reviewed but unapplied from this environment. Report priority is category-derived only, report volume never changes risk or triggers punishment, and the in-process rate limiter still needs a shared store for multi-instance deployments. OS screenshots/screen recording cannot be technically prevented. Blocks 11B and 12 are not started.
+> Migration `0008` is additive and reviewed but unapplied from this environment. Report priority is category-derived only, report volume never changes risk or triggers punishment, and the in-process rate limiter still needs a shared store for multi-instance deployments. OS screenshots/screen recording cannot be technically prevented. Block 11B is complete locally; Block 12 converted the site to a GitHub Pages static export.
 
-## Block 11 — Polish and hardening
+## Block 11B — Polish and hardening (complete locally)
 
-- [ ] Dark/light refinements and responsive audit
-- [ ] Image optimization and accessibility audit
-- [ ] Rate limiting and authorization review
-- [ ] Error monitoring and structured logging
-- [ ] Automated tests and CI
+- [x] Pre-change security/performance/UI audit recorded in `docs/BLOCK_11B_AUDIT.md`
+- [x] Shared active-account mutation guard: banned/suspended users cannot post, upload, engage, follow, hype, message, report, or change settings; `/appeals` remains reachable
+- [x] Admin-only confirmation recheck for suspend/ban/restore; staff pages/actions deny inactive staff
+- [x] Recovery token required and reset attempts rate-limited with a token-prefix key
+- [x] Baseline security headers plus report-only CSP on every proxy response; raw errors no longer logged
+- [x] Message requests enforced in header/history/inbox/read/notification paths with accept/decline API and safe pending card
+- [x] Hidden-word inbox masking, capped unread counts, bio visibility in people search, correct story-view recording, and banned accounts excluded from follow lists/counts
+- [x] Pagination-preserving refresh, announced unread state, mobile nav/settings disclosure, touch targets, above-fold image priority, story focus containment/scroll lock, and batched independent server reads
+- [x] Broken GitHub Pages workflow removed; validation-only Node CI added
+- [x] 90 structural/unit tests (86 pass, 4 expected skips); typecheck, lint, and build verified locally
+- [ ] Real Neon/Supabase credentials, live browser screenshots, and shared-store/distributed rate limiting (outside this environment)
+- [ ] Apply migrations on a trusted backend after scratch-database verification (Pages-only static site cannot run Drizzle migrations)
 
-## Block 12 — Launch
+> CSP remains report-only because Next.js and the theme script require inline code; it is guardrail telemetry, not enforcement. Rate limits remain per-process and cannot be claimed as distributed. Migration `0008` remains unapplied; its notification CHECK rebuild, NULL reporter dedupe gaps, evidence cascade, and redundant risk uniqueness need scratch verification before launch. Screenshot protections are web-level deterrence only and cannot prevent OS capture.
 
-- [ ] Production environment configuration
-- [ ] Performance budget and build verification
-- [ ] Deployment and smoke tests
+## Block 12 — GitHub Pages static export and launch
+
+- [x] Root cause of the Pages 404 confirmed: the old workflow uploaded the source repository (`.`) instead of a build containing `index.html`
+- [x] `output: "export"`, `basePath: "/instagram-social"`, `trailingSlash: true`, and unoptimized images configured; no `assetPrefix`
+- [x] Node-only API routes, `proxy.ts`, and Server Actions preserved in source but excluded from the static graph; browser imports use the rejecting `lib/static/actions.ts` shim
+- [x] Request-time APIs (`cookies`, `headers`, server `searchParams`) removed from prerendered pages; dynamic detail routes use `generateStaticParams` and `dynamicParams = false`
+- [x] Official Pages workflow validates, builds, verifies `out/index.html`, and uploads only `out/`; old source-upload workflow removed
+- [x] `out/` validated with `index.html`, `404.html`, `.nojekyll`, CSS/JS/fonts/images using `/instagram-social/` paths and no credentials
+- [x] Local validation: typecheck, lint, 94 tests (90 pass, 4 expected integration skips), static build
+- [ ] Push to `main`, GitHub Actions deployment, and live URL verification (pending explicit authorization)
+- [ ] Live Neon/Supabase credentials, real data flows, browser screenshots, and migration application (not available in this environment)
+
+> GitHub Pages is the only website host. Static hosting cannot run Neon Drizzle queries, Server Actions, API routes, Storage uploads, Realtime publishing, or privileged admin writes; those features are documented as unavailable in [`docs/BLOCK_12_REPORT.md`](docs/BLOCK_12_REPORT.md). Only browser sign-out uses Supabase directly; sign-up, login, recovery, confirmation, and OAuth callbacks need the preserved Node backend.
 
 ## Deferred spike — GitDB migration evaluation (approved, not started)
 

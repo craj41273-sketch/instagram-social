@@ -222,3 +222,9 @@ export default async function AdminUserDetailPage({ params }: UserDetailPageProp
     </div>
   );
 }
+
+export const dynamicParams = false;
+
+export function generateStaticParams() {
+  return [{ id: "demo" }];
+}

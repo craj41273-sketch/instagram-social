@@ -26,7 +26,9 @@ export function SettingsPage({
         <nav aria-label="Settings sections" className="lg:sticky lg:top-24">
           <Card size="sm">
             <CardContent className="p-2">
-              <SettingsNav currentPath={currentPath} />
+              <div className="max-h-64 overflow-y-auto overscroll-contain lg:max-h-none">
+                <SettingsNav currentPath={currentPath} />
+              </div>
             </CardContent>
           </Card>
         </nav>

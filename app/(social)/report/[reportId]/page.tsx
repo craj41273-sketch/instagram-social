@@ -76,3 +76,9 @@ export default async function ReportStatusPage({ params }: ReportStatusPageProps
     </PageContainer>
   );
 }
+
+export const dynamicParams = false;
+
+export function generateStaticParams() {
+  return [{ reportId: "demo" }];
+}
