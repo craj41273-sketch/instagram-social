@@ -1,5 +1,6 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
 
 /** Test-only resolver for extensionless relative imports and the `@/` alias. */
 const projectRoot = new URL("../", import.meta.url);
@@ -30,4 +31,22 @@ export async function resolve(specifier, context, nextResolve) {
   if (existing) return { url: existing.href, shortCircuit: true };
 
   return nextResolve(specifier, context);
+}
+
+/** Transpile TypeScript for Node versions without native type stripping. */
+export async function load(url, context, nextLoad) {
+  if (url.endsWith(".ts") || url.endsWith(".tsx")) {
+    const source = readFileSync(fileURLToPath(url), "utf8");
+    const { outputText } = ts.transpileModule(source, {
+      compilerOptions: {
+        module: ts.ModuleKind.ESNext,
+        target: ts.ScriptTarget.ES2022,
+        jsx: ts.JsxEmit.ReactJSX,
+      },
+      fileName: url,
+    });
+    return { format: "module", source: outputText, shortCircuit: true };
+  }
+
+  return nextLoad(url, context);
 }
